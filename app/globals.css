@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* ──────────────────────────────────────────────
+   Dark mode is toggled by adding/removing the
+   "dark" class on <html> (see useDarkMode hook),
+   so we tell Tailwind v4 to key its `dark:` variant
+   off that class instead of the OS preference.
+   ────────────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+/* ──────────────────────────────────────────────
+   Sidebar design tokens
+   The sidebar is always dark (light + dark mode
+   both use the same dark sidebar — VS Code / Figma
+   pattern). These vars never flip with the theme.
+   ────────────────────────────────────────────── */
+:root {
+  --sidebar-bg:       #1a2e20;
+  --sidebar-border:   rgba(255,255,255,0.06);
+  --sidebar-text:     rgba(255,255,255,0.62);
+  --sidebar-text-act: #ffffff;
+  --sidebar-active:   rgba(255,255,255,0.11);
+  --sidebar-hover:    rgba(255,255,255,0.07);
+  --sidebar-w:        220px;
+}
+
+
+/* ──────────────────────────────────────────────
+   Sidebar design tokens
+   The sidebar stays dark in BOTH light and dark
+   mode — same pattern as VS Code, Figma, etc.
+   These vars never flip with the theme.
+   ────────────────────────────────────────────── */
+:root {
+  --sidebar-bg:       #1a2e20;
+  --sidebar-border:   rgba(255,255,255,0.06);
+  --sidebar-text:     rgba(255,255,255,0.62);
+  --sidebar-text-act: #ffffff;
+  --sidebar-active:   rgba(255,255,255,0.11);
+  --sidebar-hover:    rgba(255,255,255,0.07);
+  --sidebar-w:        220px;
+}
+
+/* ──────────────────────────────────────────────
+   Design tokens — KhetiBahi
+   A warm "ledger book" identity: forest green +
+   muted marigold accent on a warm off-white canvas,
+   instead of stock Tailwind gray/green defaults.
+   ────────────────────────────────────────────── */
+:root {
+  --canvas: #faf9f4;
+  --surface: #ffffff;
+  --surface-2: #f3f1e9;
+  --line: #e7e2d3;
+  --ink: #1a2420;
+  --ink-muted: #6b7268;
+  --ink-faint: #9a9f8f;
+
+  --brand: #1f6b45;
+  --brand-dark: #154f33;
+  --brand-soft: #e7f4ec;
+
+  --accent: #c8862b;
+  --accent-soft: #faf0dd;
+
+  --negative: #b6502a;
+  --negative-soft: #fbeae1;
+
+  --ring: rgba(31, 107, 69, 0.35);
+}
+
+.dark {
+  --canvas: #0e1411;
+  --surface: #161d19;
+  --surface-2: #1c2420;
+  --line: #283129;
+  --ink: #edefe8;
+  --ink-muted: #98a097;
+  --ink-faint: #677064;
+
+  --brand: #45a873;
+  --brand-dark: #2f8a59;
+  --brand-soft: rgba(69, 168, 115, 0.14);
+
+  --accent: #dba955;
+  --accent-soft: rgba(219, 169, 85, 0.14);
+
+  --negative: #e0825a;
+  --negative-soft: rgba(224, 130, 90, 0.14);
+
+  --ring: rgba(69, 168, 115, 0.4);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-soft: var(--brand-soft);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-heading), var(--font-body), ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-soft: 0 1px 2px rgba(24, 36, 28, 0.04), 0 8px 24px -12px rgba(24, 36, 28, 0.12);
+  --shadow-lift: 0 2px 4px rgba(24, 36, 28, 0.06), 0 16px 36px -16px rgba(24, 36, 28, 0.22);
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Tabular figures for money — keeps columns of numbers aligned */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Soft shadow utilities matching the token system above */
+.shadow-soft {
+  box-shadow: var(--shadow-soft);
+}
+.shadow-lift {
+  box-shadow: var(--shadow-lift);
+}
+
+/* A faint ruled-ledger texture — a quiet nod to "Bahi" (account book).
+   Used sparingly: only on the hero stat card and modal headers. */
+.bahi-ledger {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 27px,
+    var(--line) 27px,
+    var(--line) 28px
+  );
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--brand-dark);
+}
+
+/* Smooth color transitions when toggling dark mode */
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+}
