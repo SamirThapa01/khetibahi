@@ -75,7 +75,7 @@ export default function DistributionChart({
   const CY = SIZE / 2;
 
   return (
-    <div className="flex flex-col sm:flex-row items-center gap-5">
+    <div className="flex flex-col items-center gap-5">
       {/* Donut */}
       <div className="relative flex-shrink-0" style={{ width: SIZE, height: SIZE }}>
         <PieChart width={SIZE} height={SIZE}>
