@@ -8,12 +8,18 @@
 import { Schema, models, model, Types } from "mongoose";
 
 const CROP_VALUES = [
+  "All Crops",
   "Tomato",
   "Potato",
   "Cauliflower",
   "Onion",
   "Cabbage",
   "Spinach",
+  "Coriander",
+  "French Bean",
+  "Khursani",
+  "Kakro",
+  "Farshi",
   "Other",
 ] as const;
 

@@ -23,6 +23,11 @@ export type CropType =
   | "Onion"
   | "Cabbage"
   | "Spinach"
+  | "Coriander"
+  | "French Bean"
+  | "Khursani"
+  | "Kakro"
+  | "Farshi"
   | "Other";
 
 /** A single expense record */

@@ -33,5 +33,10 @@ export const CROPS: { value: CropType | "All Crops"; label: string; emoji: strin
   { value: "Onion",      label: "Onion",      emoji: "🧅" },
   { value: "Cabbage",    label: "Cabbage",    emoji: "🥬" },
   { value: "Spinach",    label: "Spinach",    emoji: "🌿" },
+  { value: "Coriander",   label: "Coriander",   emoji: "🌱" },
+  { value: "French Bean", label: "French Bean", emoji: "🫛" },
+  { value: "Khursani",    label: "Khursani",    emoji: "🌶️" },
+  { value: "Kakro",       label: "Kakro",       emoji: "🥒" },
+  { value: "Farshi",      label: "Farshi",      emoji: "🎃" },
   { value: "Other",      label: "Other",      emoji: "🌱" },
 ];

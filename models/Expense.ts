@@ -26,6 +26,11 @@ const CROP_VALUES = [
   "Onion",
   "Cabbage",
   "Spinach",
+  "Coriander",
+  "French Bean",
+  "Khursani",
+  "Kakro",
+  "Farshi",
   "Other",
 ] as const;
 
