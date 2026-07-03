@@ -279,6 +279,7 @@ export default function IncomePage() {
                               <StatusIcon className="w-3 h-3" />
                               {meta.label}
                             </span>
+                            {/* {income page} */}
                             {due > 0 && (
                               <button
                                 onClick={() => setPaying(inc)}
