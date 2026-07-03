@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Download,
@@ -19,7 +19,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { useIncome } from "@/app/hooks/useIncome";
-import { useLockBodyScroll } from "@/app/hooks/useLockBodyScroll";
 import IncomeForm from "@/app/components/IncomeForm";
 import IncomeFilterBar from "@/app/components/IncomeFilterBar";
 import RecordPaymentModal from "@/app/components/RecordPaymentModal";
@@ -55,12 +54,30 @@ export default function IncomePage() {
   const [editing, setEditing]     = useState<Income | null>(null);
   const [paying, setPaying]       = useState<Income | null>(null);
 
-  // 🔒 One lock, driven by whether ANY modal is open.
-  // `!!paying` turns "Income | null" into a real boolean —
-  // otherwise TS would complain about passing an object where
-  // a boolean is expected.
-  const isAnyModalOpen = showForm || !!paying;
-  useLockBodyScroll(isAnyModalOpen);
+  // Is ANY modal open? Either the add/edit form, or the payment modal.
+  const isAnyModalOpen = showForm || paying !== null;
+
+  // 🔒 Lock background scroll while a modal is open — same logic
+  // as the Expenses page, just inlined here (no shared hook file).
+  useEffect(() => {
+    if (!isAnyModalOpen) return;
+
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [isAnyModalOpen]);
 
   function handleSubmit(data: IncomeFormData) {
     if (editing) updateIncome(editing.id, data);
