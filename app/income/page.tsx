@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { useIncome } from "@/app/hooks/useIncome";
+import { useLockBodyScroll } from "@/app/hooks/useLockBodyScroll";
 import IncomeForm from "@/app/components/IncomeForm";
 import IncomeFilterBar from "@/app/components/IncomeFilterBar";
 import RecordPaymentModal from "@/app/components/RecordPaymentModal";
@@ -53,6 +54,13 @@ export default function IncomePage() {
   const [showForm, setShowForm]   = useState(false);
   const [editing, setEditing]     = useState<Income | null>(null);
   const [paying, setPaying]       = useState<Income | null>(null);
+
+  // 🔒 One lock, driven by whether ANY modal is open.
+  // `!!paying` turns "Income | null" into a real boolean —
+  // otherwise TS would complain about passing an object where
+  // a boolean is expected.
+  const isAnyModalOpen = showForm || !!paying;
+  useLockBodyScroll(isAnyModalOpen);
 
   function handleSubmit(data: IncomeFormData) {
     if (editing) updateIncome(editing.id, data);
@@ -98,208 +106,213 @@ export default function IncomePage() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-display font-bold text-ink">Income</h1>
-          <p className="text-sm text-ink-muted mt-0.5">
-            Track crop sales — quantity, rate, and payments received.
-          </p>
-        </div>
-        <div className="flex gap-2 flex-shrink-0">
-          <button
-            onClick={() => exportIncomeToCSV(sorted)}
-            disabled={sorted.length === 0}
-            className="flex items-center gap-2 border border-line text-ink-muted text-sm font-medium px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Export</span>
-          </button>
-          <button
-            onClick={() => { setEditing(null); setShowForm(true); }}
-            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-soft transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Log Sale</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ── Stat cards ── */}
-      {income.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-brand-soft">
-              💰
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-brand mb-0.5">Total Income</p>
-              <p className="text-base font-display font-bold text-ink tabular-nums truncate">
-                {formatNPR(totalIncome)}
-              </p>
-            </div>
+    <>
+      <div
+        className={`space-y-5 ${isAnyModalOpen ? "pointer-events-none select-none" : ""}`}
+        aria-hidden={isAnyModalOpen}
+      >
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-display font-bold text-ink">Income</h1>
+            <p className="text-sm text-ink-muted mt-0.5">
+              Track crop sales — quantity, rate, and payments received.
+            </p>
           </div>
-
-          <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-[#e8f5e9]">
-              ✅
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-[#2e7d32] mb-0.5">Amount Paid</p>
-              <p className="text-base font-display font-bold text-ink tabular-nums truncate">
-                {formatNPR(totalPaid)}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-accent-soft">
-              ⏳
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-accent mb-0.5">Amount Due</p>
-              <p className="text-base font-display font-bold text-ink tabular-nums truncate">
-                {formatNPR(totalDue)}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
-            <span className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-negative-soft">
-              <Wallet className="w-5 h-5 text-negative" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-negative mb-0.5">Pending Sales</p>
-              <p className="text-base font-display font-bold text-ink tabular-nums truncate">
-                {pendingCount}
-              </p>
-            </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => exportIncomeToCSV(sorted)}
+              disabled={sorted.length === 0}
+              className="flex items-center gap-2 border border-line text-ink-muted text-sm font-medium px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+            <button
+              onClick={() => { setEditing(null); setShowForm(true); }}
+              className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-soft transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Log Sale</span>
+            </button>
           </div>
         </div>
-      )}
 
-      {/* ── Filter + table ── */}
-      <IncomeFilterBar filters={filters} onFilter={setFilter} onReset={resetFilters} />
+        {/* ── Stat cards ── */}
+        {income.length > 0 && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-brand-soft">
+                💰
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-brand mb-0.5">Total Income</p>
+                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
+                  {formatNPR(totalIncome)}
+                </p>
+              </div>
+            </div>
 
-      <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line gap-3">
-          <h2 className="font-display font-semibold text-ink text-sm flex-shrink-0">Sales Records</h2>
-          <span className="text-xs text-ink-muted tabular-nums text-right truncate">
-            {filteredIncome.length} sales · {formatNPR(filteredTotal)}
-          </span>
-        </div>
+            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-[#e8f5e9]">
+                ✅
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-[#2e7d32] mb-0.5">Amount Paid</p>
+                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
+                  {formatNPR(totalPaid)}
+                </p>
+              </div>
+            </div>
 
-        {sorted.length === 0 ? (
-          <div className="text-center py-14">
-            <Inbox className="w-8 h-8 text-ink-faint mx-auto mb-2" />
-            <p className="text-sm text-ink-muted">No sales match your filters.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-5 py-2.5">Crop</th>
-                  <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5">Buyer</th>
-                  <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 hidden sm:table-cell">Qty × Rate</th>
-                  <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 hidden md:table-cell">Date</th>
-                  <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5">Payment</th>
-                  <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-5 py-2.5">Amount</th>
-                  <th className="w-20" />
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((inc) => {
-                  const crop = CROPS.find((c) => c.value === inc.crop);
-                  const total = inc.quantityKg * inc.ratePerKg;
-                  const due = amountDueFor(inc);
-                  const status = getPaymentStatus(inc);
-                  const meta = STATUS_META[status];
-                  const StatusIcon = meta.Icon;
+            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-accent-soft">
+                ⏳
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-accent mb-0.5">Amount Due</p>
+                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
+                  {formatNPR(totalDue)}
+                </p>
+              </div>
+            </div>
 
-                  return (
-                    <tr
-                      key={inc.id}
-                      className="border-b border-line last:border-0 hover:bg-surface-2 transition-colors group"
-                    >
-                      {/* Crop */}
-                      <td className="px-5 py-3">
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-soft text-brand whitespace-nowrap">
-                          {crop?.emoji} {inc.crop}
-                        </span>
-                      </td>
-
-                      {/* Buyer */}
-                      <td className="px-4 py-3 font-medium text-ink max-w-[140px] truncate" title={inc.buyer}>
-                        {inc.buyer}
-                      </td>
-
-                      {/* Qty × Rate */}
-                      <td className="px-4 py-3 text-ink-muted tabular-nums hidden sm:table-cell whitespace-nowrap">
-                        {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
-                      </td>
-
-                      {/* Date */}
-                      <td className="px-4 py-3 text-ink-muted tabular-nums hidden md:table-cell whitespace-nowrap">{inc.date}</td>
-
-                      {/* Payment status badge */}
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.bg} ${meta.text}`}>
-                            <StatusIcon className="w-3 h-3" />
-                            {meta.label}
-                          </span>
-                          {due > 0 && (
-                            <button
-                              onClick={() => setPaying(inc)}
-                              className="text-[11px] font-medium text-brand hover:underline whitespace-nowrap"
-                            >
-                              + Add payment
-                            </button>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Amount */}
-                      <td className="px-5 py-3 text-right">
-                        <p className="font-semibold text-brand tabular-nums whitespace-nowrap">+{formatNPR(total)}</p>
-                        {due > 0 && (
-                          <p className="text-[11px] text-ink-faint tabular-nums whitespace-nowrap">
-                            {formatNPR(due)} due
-                          </p>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => handleEdit(inc)}
-                            className="p-1.5 rounded-lg text-ink-faint hover:text-brand hover:bg-brand-soft transition-colors"
-                            title="Edit"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(inc.id, inc.crop, inc.buyer)}
-                            className="p-1.5 rounded-lg text-ink-faint hover:text-negative hover:bg-negative-soft transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
+              <span className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-negative-soft">
+                <Wallet className="w-5 h-5 text-negative" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-negative mb-0.5">Pending Sales</p>
+                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
+                  {pendingCount}
+                </p>
+              </div>
+            </div>
           </div>
         )}
+
+        {/* ── Filter + table ── */}
+        <IncomeFilterBar filters={filters} onFilter={setFilter} onReset={resetFilters} />
+
+        <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
+          <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line gap-3">
+            <h2 className="font-display font-semibold text-ink text-sm flex-shrink-0">Sales Records</h2>
+            <span className="text-xs text-ink-muted tabular-nums text-right truncate">
+              {filteredIncome.length} sales · {formatNPR(filteredTotal)}
+            </span>
+          </div>
+
+          {sorted.length === 0 ? (
+            <div className="text-center py-14">
+              <Inbox className="w-8 h-8 text-ink-faint mx-auto mb-2" />
+              <p className="text-sm text-ink-muted">No sales match your filters.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line">
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-5 py-2.5">Crop</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5">Buyer</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 hidden sm:table-cell">Qty × Rate</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5 hidden md:table-cell">Date</th>
+                    <th className="text-left text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-4 py-2.5">Payment</th>
+                    <th className="text-right text-[11px] font-semibold uppercase tracking-wider text-ink-faint px-5 py-2.5">Amount</th>
+                    <th className="w-20" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((inc) => {
+                    const crop = CROPS.find((c) => c.value === inc.crop);
+                    const total = inc.quantityKg * inc.ratePerKg;
+                    const due = amountDueFor(inc);
+                    const status = getPaymentStatus(inc);
+                    const meta = STATUS_META[status];
+                    const StatusIcon = meta.Icon;
+
+                    return (
+                      <tr
+                        key={inc.id}
+                        className="border-b border-line last:border-0 hover:bg-surface-2 transition-colors group"
+                      >
+                        {/* Crop */}
+                        <td className="px-5 py-3">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-brand-soft text-brand whitespace-nowrap">
+                            {crop?.emoji} {inc.crop}
+                          </span>
+                        </td>
+
+                        {/* Buyer */}
+                        <td className="px-4 py-3 font-medium text-ink max-w-[140px] truncate" title={inc.buyer}>
+                          {inc.buyer}
+                        </td>
+
+                        {/* Qty × Rate */}
+                        <td className="px-4 py-3 text-ink-muted tabular-nums hidden sm:table-cell whitespace-nowrap">
+                          {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
+                        </td>
+
+                        {/* Date */}
+                        <td className="px-4 py-3 text-ink-muted tabular-nums hidden md:table-cell whitespace-nowrap">{inc.date}</td>
+
+                        {/* Payment status badge */}
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.bg} ${meta.text}`}>
+                              <StatusIcon className="w-3 h-3" />
+                              {meta.label}
+                            </span>
+                            {due > 0 && (
+                              <button
+                                onClick={() => setPaying(inc)}
+                                className="text-[11px] font-medium text-brand hover:underline whitespace-nowrap"
+                              >
+                                + Add payment
+                              </button>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-5 py-3 text-right">
+                          <p className="font-semibold text-brand tabular-nums whitespace-nowrap">+{formatNPR(total)}</p>
+                          {due > 0 && (
+                            <p className="text-[11px] text-ink-faint tabular-nums whitespace-nowrap">
+                              {formatNPR(due)} due
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleEdit(inc)}
+                              className="p-1.5 rounded-lg text-ink-faint hover:text-brand hover:bg-brand-soft transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(inc.id, inc.crop, inc.buyer)}
+                              className="p-1.5 rounded-lg text-ink-faint hover:text-negative hover:bg-negative-soft transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Modal: add/edit sale */}
+      {/* Modal: add/edit sale — sibling of the disabled div, always interactive */}
       {showForm && (
         <IncomeForm
           onSubmit={handleSubmit}
@@ -321,7 +334,7 @@ export default function IncomePage() {
         />
       )}
 
-      {/* Modal: quick record-payment */}
+      {/* Modal: quick record-payment — also a sibling */}
       {paying && (
         <RecordPaymentModal
           income={paying}
@@ -329,6 +342,6 @@ export default function IncomePage() {
           onCancel={() => setPaying(null)}
         />
       )}
-    </div>
+    </>
   );
 }
