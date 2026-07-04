@@ -22,6 +22,7 @@ import { useIncome } from "@/app/hooks/useIncome";
 import IncomeForm from "@/app/components/IncomeForm";
 import IncomeFilterBar from "@/app/components/IncomeFilterBar";
 import RecordPaymentModal from "@/app/components/RecordPaymentModal";
+import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 import { Income, IncomeFormData } from "@/app/types";
 import { exportIncomeToCSV, grandIncomeTotal, formatNPR, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CROPS } from "@/app/utils/constants";
@@ -53,9 +54,11 @@ export default function IncomePage() {
   const [showForm, setShowForm]   = useState(false);
   const [editing, setEditing]     = useState<Income | null>(null);
   const [paying, setPaying]       = useState<Income | null>(null);
+  const [incomeToDelete, setIncomeToDelete] = useState<{ id: string; crop: string; buyer: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Is ANY modal open? Either the add/edit form, or the payment modal.
-  const isAnyModalOpen = showForm || paying !== null;
+  // Is ANY modal open? The add/edit form, the payment modal, or the delete confirm modal.
+  const isAnyModalOpen = showForm || paying !== null || incomeToDelete !== null;
 
   // 🔒 Lock background scroll while a modal is open — same logic
   // as the Expenses page, just inlined here (no shared hook file).
@@ -96,8 +99,21 @@ export default function IncomePage() {
     setEditing(null);
   }
 
+  // Opens the confirm modal instead of deleting right away
   function handleDelete(id: string, crop: string, buyer: string) {
-    if (confirm(`Delete sale of ${crop} to ${buyer}?`)) deleteIncome(id);
+    setIncomeToDelete({ id, crop, buyer });
+  }
+
+  // Runs only when the user confirms inside the modal
+  async function handleConfirmDelete() {
+    if (!incomeToDelete) return;
+    setIsDeleting(true);
+    try {
+      deleteIncome(incomeToDelete.id);
+    } finally {
+      setIsDeleting(false);
+      setIncomeToDelete(null);
+    }
   }
 
   function handleConfirmPayment(extraPaid: number) {
@@ -358,6 +374,25 @@ export default function IncomePage() {
           income={paying}
           onConfirm={handleConfirmPayment}
           onCancel={() => setPaying(null)}
+        />
+      )}
+
+      {/* Modal: delete confirmation — opens when a trash icon is clicked */}
+      {incomeToDelete && (
+        <ConfirmDeleteModal
+          isOpen={incomeToDelete !== null}
+          title="Delete sale?"
+          description={
+            <>
+              This will permanently delete the sale of{" "}
+              <span className="font-semibold text-negative">{incomeToDelete.crop}</span> to{" "}
+              <span className="font-semibold text-negative">{incomeToDelete.buyer}</span>.
+              This action cannot be undone.
+            </>
+          }
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setIncomeToDelete(null)}
+          isLoading={isDeleting}
         />
       )}
     </>

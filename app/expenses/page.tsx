@@ -23,6 +23,7 @@ import DistributionChart from "@/app/components/DistributionChart";
 import { Expense, ExpenseFormData } from "@/app/types";
 import { exportToCSV, grandTotal, formatNPR } from "@/app/utils/helpers";
 import { CATEGORIES } from "@/app/utils/constants";
+import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 
 // Icon badge shown inside category stat cards
 const CATEGORY_ICONS: Record<string, { bg: string; icon: string }> = {
@@ -53,6 +54,8 @@ export default function ExpensesPage() {
 
   const [showForm, setShowForm]       = useState(false);
   const [editing, setEditing]         = useState<Expense | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<{ id: string; category: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // 🔒 Lock background scroll while the modal is open.
   // Runs every time `showForm` flips true/false.
@@ -95,8 +98,21 @@ export default function ExpensesPage() {
     setEditing(null);
   }
 
+  // Opens the confirm modal instead of deleting right away
   function handleDelete(id: string, label: string) {
-    if (confirm(`Delete this ${label} expense?`)) deleteExpense(id);
+    setExpenseToDelete({ id, category: label });
+  }
+
+  // Runs only when the user confirms inside the modal
+  async function handleConfirmDelete() {
+    if (!expenseToDelete) return;
+    setIsDeleting(true);
+    try {
+      deleteExpense(expenseToDelete.id);
+    } finally {
+      setIsDeleting(false);
+      setExpenseToDelete(null);
+    }
   }
 
   const sorted = [...filteredExpenses].sort(
@@ -311,7 +327,7 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Modal — lives OUTSIDE the pointer-events-none wrapper,
+      {/* Edit/Add form modal — lives OUTSIDE the pointer-events-none wrapper,
           so it stays fully clickable/scrollable/draggable even
           while everything behind it is frozen. */}
       {showForm && (
@@ -330,6 +346,24 @@ export default function ExpensesPage() {
                 }
               : undefined
           }
+        />
+      )}
+
+      {/* Delete confirmation modal — opens when a trash icon is clicked */}
+      {expenseToDelete && (
+        <ConfirmDeleteModal
+          isOpen={expenseToDelete !== null}
+          title="Delete expense?"
+          description={
+            <>
+              This will permanently delete this{" "}
+              <span className="font-semibold text-negative">{expenseToDelete.category}</span>{" "}
+              expense. This action cannot be undone.
+            </>
+          }
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setExpenseToDelete(null)}
+          isLoading={isDeleting}
         />
       )}
     </>
