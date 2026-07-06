@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 import LayoutShell from "./components/LayoutShell";
+import { InformationProvider } from "./components/Information";
+InformationProvider
 
 // Display face — confident geometric sans for headings & numbers
 const heading = Plus_Jakarta_Sans({
@@ -35,15 +37,17 @@ export default function RootLayout({
       className={`${heading.variable} ${body.variable}`}
     >
       <body className="font-sans antialiased bg-canvas text-ink">
-        <AuthProvider>
-          {/*
-            LayoutShell is a Client Component that decides which chrome to
-            render:
-              - Auth pages (/login, /signup) → no sidebar, no topbar, just children
-              - App pages → sidebar + topbar + main content + mobile nav
-          */}
-          <LayoutShell>{children}</LayoutShell>
-        </AuthProvider>
+        <InformationProvider>
+          <AuthProvider>
+            {/*
+              LayoutShell is a Client Component that decides which chrome to
+              render:
+                - Auth pages (/login, /signup) → no sidebar, no topbar, just children
+                - App pages → sidebar + topbar + main content + mobile nav
+            */}
+            <LayoutShell>{children}</LayoutShell>
+          </AuthProvider>
+        </InformationProvider>
       </body>
     </html>
   );

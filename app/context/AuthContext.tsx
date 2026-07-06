@@ -12,6 +12,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { useInformation } from "@/app/components/Information";
 
 export interface AuthUser {
   id: string;
@@ -34,6 +35,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { show } = useInformation();
 
   // ── Restore session on first load ──────────
   useEffect(() => {
@@ -68,13 +70,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) return { ok: false, error: data.error ?? "Login failed." };
+      if (!res.ok) {
+        show("error", data.error ?? "Login failed.");
+        return { ok: false, error: data.error ?? "Login failed." };
+      }
       setUser(data.user);
+      show("success", "Logged in");
       return { ok: true };
     } catch {
+      show("error", "Network error. Please try again.");
       return { ok: false, error: "Network error. Please try again." };
     }
-  }, []);
+  }, [show]);
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
     try {
@@ -84,18 +91,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
-      if (!res.ok) return { ok: false, error: data.error ?? "Signup failed." };
+      if (!res.ok) {
+        show("error", data.error ?? "Signup failed.");
+        return { ok: false, error: data.error ?? "Signup failed." };
+      }
       setUser(data.user);
+      show("success", "Account created");
       return { ok: true };
     } catch {
+      show("error", "Network error. Please try again.");
       return { ok: false, error: "Network error. Please try again." };
     }
-  }, []);
+  }, [show]);
 
   const logout = useCallback(async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
-  }, []);
+    show("success", "Signed out");
+  }, [show]);
 
   const updateProfile = useCallback(
     async (data: { name?: string; profileImage?: string }) => {
@@ -106,14 +119,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(data),
         });
         const body = await res.json();
-        if (!res.ok) return { ok: false, error: body.error ?? "Could not update profile." };
+        if (!res.ok) {
+          show("error", body.error ?? "Could not update profile.");
+          return { ok: false, error: body.error ?? "Could not update profile." };
+        }
         setUser(body.user);
+        show("success", "Updated successfully");
         return { ok: true };
       } catch {
+        show("error", "Network error. Please try again.");
         return { ok: false, error: "Network error. Please try again." };
       }
     },
-    []
+    [show]
   );
 
   return (
