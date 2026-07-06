@@ -23,6 +23,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Expense, ExpenseFormData, ExpenseCategory, CropType } from "@/app/types";
 import { buildCategorySummaries, buildMonthlySummaries, grandTotal } from "@/app/utils/helpers";
+import { useInformation } from "../components/Information";
+
 
 /** What callers can control via filters */
 export interface ExpenseFilters {
@@ -45,6 +47,7 @@ export function useExpenses() {
   const [filters, setFilters] = useState<ExpenseFilters>(DEFAULT_FILTERS);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show } = useInformation();
 
   // ── Load from the database once on mount ──
   useEffect(() => {
@@ -79,16 +82,18 @@ export function useExpenses() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not add expense");
         throw new Error(body.error ?? "Could not save expense.");
       }
       const saved: Expense = await res.json();
       setExpenses((prev) => [saved, ...prev]);
       setError(null);
+      show("success", "Expense added");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save expense.");
     }
-  }, []);
+  }, [show]);
 
   /** Update an existing expense (matched by id) */
   const updateExpense = useCallback(async (id: string, data: ExpenseFormData): Promise<void> => {
@@ -100,16 +105,18 @@ export function useExpenses() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not update expense");
         throw new Error(body.error ?? "Could not update expense.");
       }
       const updated: Expense = await res.json();
       setExpenses((prev) => prev.map((e) => (e.id === id ? updated : e)));
       setError(null);
+      show("success", "Expense updated");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update expense.");
     }
-  }, []);
+  }, [show]);
 
   /** Remove an expense permanently */
   const deleteExpense = useCallback(async (id: string): Promise<void> => {
@@ -117,15 +124,17 @@ export function useExpenses() {
       const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not delete expense");
         throw new Error(body.error ?? "Could not delete expense.");
       }
       setExpenses((prev) => prev.filter((e) => e.id !== id));
       setError(null);
+      show("success", "Expense deleted");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete expense.");
     }
-  }, []);
+  }, [show]);
 
   // ── Filtering ─────────────────────────────
 

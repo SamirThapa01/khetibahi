@@ -12,6 +12,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Income, IncomeFormData, CropType, PaymentStatus } from "@/app/types";
 import { grandIncomeTotal, totalAmountDue, getPaymentStatus, buildPaymentStatusSummary } from "@/app/utils/helpers";
+import { useInformation } from "../components/Information";
+
 
 export interface IncomeFilters {
   crop: CropType | "All";
@@ -32,6 +34,7 @@ export function useIncome() {
   const [filters, setFilters] = useState<IncomeFilters>(DEFAULT_FILTERS);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { show } = useInformation();
 
   // ── Load from the database once on mount ──
   useEffect(() => {
@@ -65,16 +68,18 @@ export function useIncome() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not save income");
         throw new Error(body.error ?? "Could not save income.");
       }
       const saved: Income = await res.json();
       setIncome((prev) => [saved, ...prev]);
       setError(null);
+      show("success", "Income added");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save income.");
     }
-  }, []);
+  }, [show]);
 
   const updateIncome = useCallback(async (id: string, data: IncomeFormData): Promise<void> => {
     try {
@@ -85,37 +90,45 @@ export function useIncome() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not update income");
         throw new Error(body.error ?? "Could not update income.");
       }
       const updated: Income = await res.json();
       setIncome((prev) => prev.map((i) => (i.id === id ? updated : i)));
       setError(null);
+      show("success", "Income updated");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update income.");
     }
-  }, []);
+  }, [show]);
 
   const deleteIncome = useCallback(async (id: string): Promise<void> => {
     try {
       const res = await fetch(`/api/income/${id}`, { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not delete income");
         throw new Error(body.error ?? "Could not delete income.");
       }
       setIncome((prev) => prev.filter((i) => i.id !== id));
       setError(null);
+      show("success", "Income deleted");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete income.");
     }
-  }, []);
+  }, [show]);
 
   /**
    * Quick "Record Payment" action — adds `extraPaid` on top of whatever
    * has already been received, capped at the sale's total, without
    * requiring the farmer to reopen the full edit form. Used by the
    * "Add Payment" button on Partial/Due rows.
+   *
+   * No show() call here on purpose — this just delegates to updateIncome,
+   * which already toasts on success/failure. Toasting here too would
+   * fire two messages for one click.
    */
   const recordPayment = useCallback(
     async (id: string, extraPaid: number): Promise<void> => {
