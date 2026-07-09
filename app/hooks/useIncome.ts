@@ -4,7 +4,7 @@
 //  Same pattern as useExpenses: loads from the
 //  API (→ MongoDB) on mount, sends every
 //  add/edit/delete straight to the server, and
-//  exposes filtering + computed totals.
+//  exposes filtering + computed total.
 // ─────────────────────────────────────────────
 
 "use client";
