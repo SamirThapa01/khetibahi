@@ -53,6 +53,30 @@ export function buildCategorySummaries(expenses: Expense[]): CategorySummary[] {
   })).sort((a, b) => b.total - a.total);
 }
 
+/**
+ * Same output shape as buildCategorySummaries(), but starting from
+ * pre-aggregated {category, total, count} totals (from the
+ * /api/expenses/summary MongoDB aggregation) instead of a raw Expense[].
+ * Used by the Expenses page's table hook, which only ever holds one
+ * page (10 rows) in memory — so category totals must come pre-summed
+ * from the server instead of being reduced client-side.
+ */
+export function buildCategorySummariesFromTotals(
+  categoryTotals: { category: string; total: number; count: number }[]
+): CategorySummary[] {
+  const totals: Record<string, { total: number; count: number }> = {};
+  for (const c of categoryTotals) {
+    totals[c.category] = { total: c.total, count: c.count };
+  }
+
+  return CATEGORIES.map((cat) => ({
+    category: cat.value,
+    total: totals[cat.value]?.total ?? 0,
+    count: totals[cat.value]?.count ?? 0,
+    color: cat.bg,
+  })).sort((a, b) => b.total - a.total);
+}
+
 /** Group expenses into monthly summaries, sorted newest-first */
 export function buildMonthlySummaries(expenses: Expense[]): MonthlySummary[] {
   const map: Record<string, MonthlySummary> = {};

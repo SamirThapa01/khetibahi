@@ -16,12 +16,12 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Download, Inbox, Pencil, Trash2 } from "lucide-react";
-import { useExpenses } from "@/app/hooks/useExpenses";
+import { useExpensesTable } from "@/app/hooks/useExpensesTable";
 import ExpenseForm from "@/app/components/ExpenseForm";
 import FilterBar from "@/app/components/FilterBar";
 import DistributionChart from "@/app/components/DistributionChart";
 import { Expense, ExpenseFormData } from "@/app/types";
-import { exportToCSV, grandTotal, formatNPR } from "@/app/utils/helpers";
+import { exportToCSV, formatNPR } from "@/app/utils/helpers";
 import { CATEGORIES } from "@/app/utils/constants";
 import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 
@@ -40,17 +40,22 @@ const CATEGORY_ICONS: Record<string, { bg: string; icon: string }> = {
 export default function ExpensesPage() {
   const {
     expenses,
-    filteredExpenses,
     categorySummaries,
     totalSpend,
     isLoaded,
+    page,
+    setPage,
+    totalPages,
+    total,
+    filteredTotal,
     addExpense,
     updateExpense,
     deleteExpense,
+    fetchAllForExport,
     filters,
     setFilter,
     resetFilters,
-  } = useExpenses();
+  } = useExpensesTable();
 
   const [showForm, setShowForm]       = useState(false);
   const [editing, setEditing]         = useState<Expense | null>(null);
@@ -115,10 +120,17 @@ export default function ExpensesPage() {
     }
   }
 
-  const sorted = [...filteredExpenses].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const filteredTotal = grandTotal(filteredExpenses);
+  // The server already sorts newest-first and applies the active filters —
+  // `expenses` here is just the current page (max 10 rows).
+  const sorted = expenses;
+
+  async function handleExport() {
+    // Export should cover every filtered row, not just the visible page,
+    // so it makes one dedicated request (limit=all) instead of reusing
+    // the paginated 10-row fetch.
+    const all = await fetchAllForExport();
+    exportToCSV(all);
+  }
 
   // Top 4 categories by total spend — for the stat cards
   const topCategories = [...categorySummaries]
@@ -155,8 +167,8 @@ export default function ExpensesPage() {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <button
-              onClick={() => exportToCSV(sorted)}
-              disabled={sorted.length === 0}
+              onClick={handleExport}
+              disabled={total === 0}
               className="flex items-center gap-2 border border-line text-ink-muted text-sm font-medium px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
@@ -219,7 +231,7 @@ export default function ExpensesPage() {
                   Expense Records
                 </h2>
                 <span className="text-xs text-ink-muted tabular-nums">
-                  {filteredExpenses.length} entries · {formatNPR(filteredTotal)}
+                  {total} entries · {formatNPR(filteredTotal)}
                 </span>
               </div>
 
@@ -310,11 +322,36 @@ export default function ExpensesPage() {
                   </table>
                 </div>
               )}
+
+              {/* Pagination footer — backend sends 10 rows per request */}
+              {total > 0 && (
+                <div className="flex items-center justify-between px-5 py-3 border-t border-line text-xs text-ink-muted">
+                  <span>
+                    Page {page} of {totalPages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                      className="px-3 py-1.5 rounded-lg border border-line hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                      className="px-3 py-1.5 rounded-lg border border-line hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Right: distribution donut */}
-          {expenses.length > 0 && (
+          {total > 0 && (
             <div className="w-full xl:w-72 flex-shrink-0">
               <div className="bg-surface rounded-2xl border border-line shadow-soft p-5 sticky top-20">
                 <h2 className="font-display font-semibold text-ink text-sm mb-4">

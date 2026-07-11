@@ -18,13 +18,13 @@ import {
   Clock3,
   Wallet,
 } from "lucide-react";
-import { useIncome } from "@/app/hooks/useIncome";
+import { useIncomeTable } from "@/app/hooks/useIncomeTable";
 import IncomeForm from "@/app/components/IncomeForm";
 import IncomeFilterBar from "@/app/components/IncomeFilterBar";
 import RecordPaymentModal from "@/app/components/RecordPaymentModal";
 import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 import { Income, IncomeFormData } from "@/app/types";
-import { exportIncomeToCSV, grandIncomeTotal, formatNPR, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
+import { exportIncomeToCSV, formatNPR, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CROPS } from "@/app/utils/constants";
 
 // Visual language for each payment status — reused across the badge and the stat card
@@ -37,19 +37,24 @@ const STATUS_META = {
 export default function IncomePage() {
   const {
     income,
-    filteredIncome,
     totalIncome,
     totalDue,
     statusSummary,
     isLoaded,
+    page,
+    setPage,
+    totalPages,
+    total,
+    filteredTotal,
     addIncome,
     updateIncome,
     deleteIncome,
     recordPayment,
+    fetchAllForExport,
     filters,
     setFilter,
     resetFilters,
-  } = useIncome();
+  } = useIncomeTable();
 
   const [showForm, setShowForm]   = useState(false);
   const [editing, setEditing]     = useState<Income | null>(null);
@@ -121,14 +126,23 @@ export default function IncomePage() {
     setPaying(null);
   }
 
-  const sorted = [...filteredIncome].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
-  const filteredTotal = grandIncomeTotal(filteredIncome);
-  const totalPaid = income.reduce((s, i) => s + i.amountPaid, 0);
+  // The server already sorts newest-first and applies the active filters —
+  // `income` here is just the current page (max 10 rows).
+  const sorted = income;
+  // totalPaid = totalIncome - totalDue (every rupee is either paid or
+  // still outstanding) — no extra request needed for this stat card.
+  const totalPaid = totalIncome - totalDue;
   const pendingCount = statusSummary
     .filter((s) => s.status !== "Paid")
     .reduce((sum, s) => sum + s.count, 0);
+
+  async function handleExport() {
+    // Export needs every filtered row, not just the visible page, so it
+    // makes one dedicated request (limit=all) instead of reusing the
+    // paginated 10-row fetch.
+    const all = await fetchAllForExport();
+    exportIncomeToCSV(all);
+  }
 
   if (!isLoaded) {
     return (
@@ -154,8 +168,8 @@ export default function IncomePage() {
           </div>
           <div className="flex gap-2 flex-shrink-0">
             <button
-              onClick={() => exportIncomeToCSV(sorted)}
-              disabled={sorted.length === 0}
+              onClick={handleExport}
+              disabled={total === 0}
               className="flex items-center gap-2 border border-line text-ink-muted text-sm font-medium px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
@@ -172,7 +186,7 @@ export default function IncomePage() {
         </div>
 
         {/* ── Stat cards ── */}
-        {income.length > 0 && (
+        {total > 0 && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
               <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-brand-soft">
@@ -231,7 +245,7 @@ export default function IncomePage() {
           <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line gap-3">
             <h2 className="font-display font-semibold text-ink text-sm flex-shrink-0">Sales Records</h2>
             <span className="text-xs text-ink-muted tabular-nums text-right truncate">
-              {filteredIncome.length} sales · {formatNPR(filteredTotal)}
+              {total} sales · {formatNPR(filteredTotal)}
             </span>
           </div>
 
@@ -341,6 +355,31 @@ export default function IncomePage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination footer — backend sends 10 rows per request */}
+          {total > 0 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-line text-xs text-ink-muted">
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-line hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 rounded-lg border border-line hover:bg-surface-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
