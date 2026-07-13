@@ -22,6 +22,8 @@ import {
   LogOut,
   Wheat,
   Leaf,
+  PiggyBank,
+  Repeat
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -29,6 +31,8 @@ const NAV = [
   { href: "/",          label: "Dashboard", Icon: LayoutDashboard },
   { href: "/income",    label: "Income",    Icon: Coins           },
   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+ { href: "/recurring", label: "Recurring", Icon: Repeat          },
   { href: "/crops",     label: "Crops",     Icon: Leaf            },
   { href: "/analytics", label: "Analytics", Icon: BarChart2       },
 ];

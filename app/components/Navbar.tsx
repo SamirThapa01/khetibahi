@@ -10,12 +10,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf } from "lucide-react";
+import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf, PiggyBank, Repeat } from "lucide-react";
 
 const NAV = [
   { href: "/",          label: "Home",      Icon: LayoutDashboard },
   { href: "/income",    label: "Income",    Icon: Coins           },
   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+{ href: "/recurring", label: "Recurring", Icon: Repeat          },
   { href: "/crops",     label: "Crops",     Icon: Leaf            },
   { href: "/analytics", label: "Stats",     Icon: BarChart2       },
 ];

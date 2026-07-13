@@ -8,7 +8,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3 } from "lucide-react";
+import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3, PiggyBank, Repeat } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import SummaryCard from "@/app/components/SummaryCard";
@@ -19,6 +19,10 @@ import CashFlowChart from "@/app/components/CashFlowChart";
 import { formatNPR, buildCashFlowSummaries, buildBuyerDues } from "@/app/utils/helpers";
 import { ExpenseFormData } from "@/app/types";
 import { format } from "date-fns";
+import { useBudgets } from "@/app/hooks/useBudgets";
+import { useRecurringExpenses } from "@/app/hooks/useRecurringExpenses";
+import BudgetProgress from "@/app/components/BudgetProgress";
+
 
 export default function DashboardPage() {
   const {
@@ -30,6 +34,8 @@ export default function DashboardPage() {
   } = useExpenses();
 
   const { income, totalIncome, isLoaded: incomeLoaded } = useIncome();
+  const { budgets } = useBudgets(expenses);
+ const { items: recurringItems, loading: recurringLoading } = useRecurringExpenses();
 
   const [showForm, setShowForm] = useState(false);
 
@@ -38,6 +44,9 @@ export default function DashboardPage() {
   const thisMonthTotal = expenses
     .filter((e) => e.date.startsWith(thisMonthKey))
     .reduce((sum, e) => sum + e.amount, 0);
+
+  const thisMonthBudgets = budgets.filter((b) => b.month === thisMonthKey);
+  const activeRecurring = recurringItems.filter((r) => r.active);
 
   // Net profit/loss across the whole farm: everything earned minus everything spent
   const netProfit = totalIncome - totalSpend;
@@ -214,6 +223,75 @@ export default function DashboardPage() {
               )}
             </div>
           )}
+
+          {/* Budgets + Recurring Expenses preview */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+        <PiggyBank className="w-4 h-4 text-brand" />
+        Budget Progress
+      </h3>
+      <a href="/budgets" className="text-xs text-brand font-medium hover:underline">
+        Manage →
+      </a>
+    </div>
+    {thisMonthBudgets.length > 0 ? (
+      <BudgetProgress budgets={thisMonthBudgets} />
+    ) : (
+      <p className="text-sm text-ink-muted">
+        No budgets set for {format(new Date(), "MMMM")} yet.{" "}
+        <a href="/budgets" className="text-brand font-medium hover:underline">
+          Set one
+        </a>
+        .
+      </p>
+    )}
+  </div>
+
+  <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+        <Repeat className="w-4 h-4 text-brand" />
+        Recurring Expenses
+      </h3>
+      <a href="/recurring" className="text-xs text-brand font-medium hover:underline">
+        Manage →
+      </a>
+    </div>
+    {!recurringLoading && activeRecurring.length > 0 ? (
+      <div className="space-y-2">
+        {activeRecurring.slice(0, 4).map((r) => (
+          <div key={r._id} className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0">
+            <div>
+              <p className="text-ink font-medium">
+                {r.category}
+                {r.crop !== "All Crops" ? ` · ${r.crop}` : ""}
+              </p>
+              <p className="text-ink-faint text-xs">
+                {r.frequency === "monthly" ? `Monthly · day ${r.dayOfMonth}` : "Weekly"}
+              </p>
+            </div>
+            <span className="font-semibold text-ink tabular-nums">{formatNPR(r.amount)}</span>
+          </div>
+        ))}
+        {activeRecurring.length > 4 && (
+          <a href="/recurring" className="text-xs text-brand font-medium hover:underline mt-1 inline-block">
+            View all {activeRecurring.length} →
+          </a>
+        )}
+      </div>
+    ) : (
+      <p className="text-sm text-ink-muted">
+        No recurring expenses set up yet.{" "}
+        <a href="/recurring" className="text-brand font-medium hover:underline">
+          Add one
+        </a>
+        .
+      </p>
+    )}
+  </div>
+</div>
 
           {/* Chart + recent expenses */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
