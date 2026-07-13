@@ -21,6 +21,7 @@ function serialize(doc: HydratedDocument<IIncome>) {
     amountPaid: doc.amountPaid,
     note: doc.note,
     billImage: doc.billImage || undefined,
+    season: doc.season || undefined,  
     createdAt: doc.createdAt.toISOString(),
   };
 }
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage } = body;
+    const { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage, season } = body;
 
     if (!date || !crop || !buyer || quantityKg === undefined || ratePerKg === undefined) {
       return NextResponse.json(
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
       amountPaid: amountPaid ?? 0,
       note: note ?? "",
       billImage: billImage ?? "",
+      season: season || undefined,
     });
 
     return NextResponse.json(serialize(created), { status: 201 });

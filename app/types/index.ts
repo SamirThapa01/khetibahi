@@ -40,6 +40,8 @@ export interface Expense {
   note: string;
   billImage?: string;   // optional receipt/bill photo, stored as a base64 data URL
   createdAt: string;    // ISO timestamp — when the user added it
+  
+  season?: string;
 }
 
 /** What the add/edit form holds before it becomes an Expense */
@@ -57,6 +59,7 @@ export interface Income {
   note: string;
   billImage?: string;    // optional receipt/bill photo, stored as a base64 data URL
   createdAt: string;
+  season?: string;
 }
 
 /** What the add/edit income form holds before it becomes an Income record */

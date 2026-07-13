@@ -44,6 +44,8 @@ export interface IExpense {
   note: string;
   billImage?: string; // optional receipt/bill photo, stored as a base64 data URL
   createdAt: Date;
+
+   season?: string; 
 }
 
 const ExpenseSchema = new Schema<IExpense>(
@@ -55,6 +57,7 @@ const ExpenseSchema = new Schema<IExpense>(
     amount: { type: Number, required: true, min: 0 },
     note: { type: String, default: "", trim: true },
     billImage: { type: String, default: "" },
+    season: { type: String, required: false },
   },
   { timestamps: true }
 );

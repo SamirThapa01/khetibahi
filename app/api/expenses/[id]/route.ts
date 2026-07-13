@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await req.json();
-    const { date, category, crop, amount, note, billImage } = body;
+    const { date, category, crop, amount, note, billImage, season} = body;
 
     await dbConnect();
 
@@ -26,7 +26,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // whether the id exists but belongs to someone else.
     const updated = await Expense.findOneAndUpdate(
       { _id: id, userId: user.userId },
-      { date, category, crop, amount, note, billImage: billImage ?? "" },
+      { date, category, crop, amount, note, billImage: billImage ?? "",season: season || undefined  },
       { new: true, runValidators: true }
     );
 
@@ -42,6 +42,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       amount: updated.amount,
       note: updated.note,
       billImage: updated.billImage || undefined,
+       season: updated.season || undefined,
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (err) {

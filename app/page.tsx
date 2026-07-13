@@ -8,7 +8,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown } from "lucide-react";
+import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3 } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import SummaryCard from "@/app/components/SummaryCard";
@@ -16,7 +16,7 @@ import ExpenseForm from "@/app/components/ExpenseForm";
 import ExpenseRow from "@/app/components/ExpenseRow";
 import CategoryChart from "@/app/components/CategoryChart";
 import CashFlowChart from "@/app/components/CashFlowChart";
-import { formatNPR, buildCashFlowSummaries } from "@/app/utils/helpers";
+import { formatNPR, buildCashFlowSummaries, buildBuyerDues } from "@/app/utils/helpers";
 import { ExpenseFormData } from "@/app/types";
 import { format } from "date-fns";
 
@@ -45,6 +45,13 @@ export default function DashboardPage() {
 
   // Last 6 months of income vs. expense, for the new cash flow chart
   const cashFlow = useMemo(() => buildCashFlowSummaries(expenses, income, 6), [expenses, income]);
+
+  // Who still owes money — top 5 by amount due, for a quick glance without
+  // needing to go to /analytics. Uses the same buildBuyerDues() that
+  // already powers the Analytics "Outstanding Dues" section.
+  const buyerDues = useMemo(() => buildBuyerDues(income), [income]);
+  const topDues = buyerDues.slice(0, 5);
+  const totalDue = buyerDues.reduce((sum, d) => sum + d.totalDue, 0);
 
   // 5 most recent expenses
   const recent = [...expenses]
@@ -168,6 +175,45 @@ export default function DashboardPage() {
             <p className="text-xs text-ink-muted mb-2">Income vs. expense, last 6 months.</p>
             <CashFlowChart data={cashFlow} />
           </div>
+
+          {/* Outstanding dues — quick glance, full detail lives on /analytics */}
+          {topDues.length > 0 && (
+            <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+                  <Users className="w-4 h-4 text-negative" />
+                  Outstanding Dues
+                </h3>
+                <span className="text-sm font-semibold text-negative tabular-nums">
+                  {formatNPR(totalDue)}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {topDues.map((d) => (
+                  <div
+                    key={`${d.buyer}-${d.crop}`}
+                    className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0"
+                  >
+                    <div>
+                      <p className="text-ink font-medium">{d.buyer}</p>
+                      <p className="text-ink-faint text-xs flex items-center gap-1">
+                        <Clock3 className="w-3 h-3" />
+                        {d.crop} · since {d.oldestDueDate}
+                      </p>
+                    </div>
+                    <span className="font-semibold text-negative tabular-nums">
+                      {formatNPR(d.totalDue)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {buyerDues.length > 5 && (
+                <a href="/analytics" className="text-xs text-brand font-medium hover:underline mt-3 inline-block">
+                  View all {buyerDues.length} →
+                </a>
+              )}
+            </div>
+          )}
 
           {/* Chart + recent expenses */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

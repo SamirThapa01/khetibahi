@@ -315,3 +315,70 @@ export function prettyDate(isoDate: string): string {
 export function todayISO(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
+
+export interface OutstandingDue {
+  incomeId: string;
+  buyer: string;
+  crop: string;
+  totalValue: number;
+  amountPaid: number;
+  amountDue: number;
+  saleDate: string;
+  daysSince: number;
+  isOverdue: boolean;
+}
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+
+export function getOutstandingDues(
+  income: Income[],
+  overdueThresholdDays = 14
+): OutstandingDue[] {
+  const today = new Date();
+
+  return income
+    .map((sale) => {
+      const totalValue = sale.ratePerKg * sale.quantityKg;
+      const amountDue = totalValue - sale.amountPaid;
+      const saleDate = new Date(sale.date);
+      const daysSince = Math.floor((today.getTime() - saleDate.getTime()) / MS_PER_DAY);
+
+      return {
+        incomeId: sale._id,
+        buyer: sale.buyer,
+        crop: sale.crop,
+        totalValue,
+        amountPaid: sale.amountPaid,
+        amountDue,
+        saleDate: sale.date,
+        daysSince,
+        isOverdue: daysSince >= overdueThresholdDays,
+      };
+    })
+    .filter((d) => d.amountDue > 0)
+    .sort((a, b) => b.daysSince - a.daysSince);
+}
+
+export function buildSeasonProfitLoss(expenses: Expense[], income: Income[]) {
+  const seasons = new Set<string>([
+    ...expenses.map((e) => e.season).filter((s): s is string => !!s),
+    ...income.map((i) => i.season).filter((s): s is string => !!s),
+  ]);
+
+  return Array.from(seasons).map((season) => {
+    const seasonIncome = income
+      .filter((i) => i.season === season)
+      .reduce((sum, i) => sum + i.ratePerKg * i.quantityKg, 0);
+
+    const seasonExpense = expenses
+      .filter((e) => e.season === season)
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    return {
+      season,
+      income: seasonIncome,
+      expense: seasonExpense,
+      profit: seasonIncome - seasonExpense,
+    };
+  });
+}

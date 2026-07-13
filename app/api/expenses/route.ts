@@ -20,6 +20,7 @@ function serialize(doc: HydratedDocument<IExpense>) {
     amount: doc.amount,
     note: doc.note,
     billImage: doc.billImage || undefined,
+    season: doc.season || undefined, 
     createdAt: doc.createdAt.toISOString(),
   };
 }
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { date, category, crop, amount, note, billImage } = body;
+    const { date, category, crop, amount, note, billImage,season } = body;
 
     if (!date || !category || amount === undefined || amount === null) {
       return NextResponse.json({ error: "date, category, and amount are required." }, { status: 400 });
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
       amount,
       note: note ?? "",
       billImage: billImage ?? "",
+      season: season || undefined, 
     });
 
     return NextResponse.json(serialize(created), { status: 201 });

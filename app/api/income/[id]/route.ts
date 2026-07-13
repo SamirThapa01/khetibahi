@@ -16,13 +16,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await req.json();
-    const { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage } = body;
+    const { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage, season } = body;
 
     await dbConnect();
 
     const updated = await Income.findOneAndUpdate(
       { _id: id, userId: user.userId },
-      { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage: billImage ?? "" },
+      { date, crop, buyer, quantityKg, ratePerKg, amountPaid, note, billImage: billImage ?? "" , season: season || undefined },
       { new: true, runValidators: true }
     );
 
@@ -40,6 +40,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       amountPaid: updated.amountPaid,
       note: updated.note,
       billImage: updated.billImage || undefined,
+      season: updated.season || undefined,
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (err) {

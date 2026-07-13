@@ -25,6 +25,10 @@ export const CATEGORIES: {
   { value: "Miscellaneous", label: "Miscellaneous", emoji: "📦", bg: "bg-gray-100",   text: "text-gray-700",   chart: "#6b7280" },
 ];
 
+export const SEASONS = [
+  "Garmi Mahina" + new Date().getFullYear(),
+  "Jado Mahina " + new Date().getFullYear(),
+];
 export const CROPS: { value: CropType | "All Crops"; label: string; emoji: string }[] = [
   { value: "All Crops",  label: "All Crops",  emoji: "🌾" },
   { value: "Tomato",     label: "Tomato",     emoji: "🍅" },

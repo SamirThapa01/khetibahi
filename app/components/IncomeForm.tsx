@@ -10,7 +10,7 @@
 import { useState, useEffect } from "react";
 import { X, Save, CheckCircle2, Clock3, CircleDollarSign } from "lucide-react";
 import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
-import { CROPS } from "@/app/utils/constants";
+import { CROPS, SEASONS } from "@/app/utils/constants";
 import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
 import ImageUploadField from "@/app/components/ImageUploadField";
 
@@ -151,6 +151,25 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
                 </button>
               ))}
             </div>
+          </div>
+          {/* Season */}
+          <div>
+            <label className="block text-sm font-medium text-ink-muted mb-1">
+              Season <span className="text-ink-faint">(optional)</span>
+            </label>
+            <input
+              list="seasons"
+              type="text"
+              value={form.season ?? ""}
+              onChange={(e) => set("season", e.target.value)}
+              placeholder="e.g. Kharif 2026"
+              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+            />
+            <datalist id="seasons">
+              {SEASONS.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
           </div>
 
           {/* Buyer */}

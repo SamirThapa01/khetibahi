@@ -35,6 +35,8 @@ export interface IIncome {
   note: string;
   billImage?: string; // optional receipt/bill photo, stored as a base64 data URL
   createdAt: Date;
+
+   season?: string; 
 }
 
 const IncomeSchema = new Schema<IIncome>(
@@ -48,6 +50,7 @@ const IncomeSchema = new Schema<IIncome>(
     amountPaid: { type: Number, required: true, min: 0, default: 0 },
     note: { type: String, default: "", trim: true },
     billImage: { type: String, default: "" },
+    season: { type: String, required: false },
   },
   { timestamps: true }
 );
