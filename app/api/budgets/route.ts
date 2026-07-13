@@ -3,32 +3,38 @@ import {dbConnect} from "@/lib/mongodb";
 import { getCurrentUser } from "@/lib/session";
 import Budget from "@/models/Budget";
 
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
-  const { amount } = await req.json();
   await dbConnect();
+  const month = req.nextUrl.searchParams.get("month");
 
-  const updated = await Budget.findOneAndUpdate(
-    { _id: id, userId: user.userId },
-    { $set: { amount } },
-    { new: true }
-  );
+  const query: Record<string, unknown> = { userId: user.userId };
+  if (month) query.month = month;
 
-  if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(updated);
+  const budgets = await Budget.find(query).sort({ month: -1, category: 1 });
+  return NextResponse.json(budgets);
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id } = await params;
-  await dbConnect();
-  const deleted = await Budget.findOneAndDelete({ _id: id, userId: user.userId });
+  const body = await req.json();
+  const { category = "All", crop = "All", month, amount } = body;
 
-  if (!deleted) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ success: true });
+  if (!month || amount === undefined) {
+    return NextResponse.json({ error: "month and amount are required" }, { status: 400 });
+  }
+
+  await dbConnect();
+
+  const budget = await Budget.findOneAndUpdate(
+    { userId: user.userId, category, crop, month },
+    { $set: { amount } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  return NextResponse.json(budget, { status: 201 });
 }
