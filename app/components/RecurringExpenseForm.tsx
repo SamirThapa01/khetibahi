@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CATEGORIES, CROPS } from "@/app/utils/constants";
 import { useRecurringExpenses } from "@/app/hooks/useRecurringExpenses";
+import { ExpenseCategory, CropType } from "@/app/types";
 
 export default function RecurringExpenseForm({ onClose }: { onClose: () => void }) {
   const { addRecurring } = useRecurringExpenses();
@@ -42,10 +43,10 @@ export default function RecurringExpenseForm({ onClose }: { onClose: () => void 
         <h2 className="text-lg font-semibold">New Recurring Expense</h2>
 
         <div className="grid grid-cols-2 gap-3">
-          <select value={category} onChange={(e) => setCategory(e.target.value)} className="input">
+          <select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className="input">
             {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-          <select value={crop} onChange={(e) => setCrop(e.target.value)} className="input">
+          <select value={crop} onChange={(e) => setCrop(e.target.value as CropType | "All Crops")} className="input">
             {CROPS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>

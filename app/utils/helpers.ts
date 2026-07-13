@@ -344,7 +344,7 @@ export function getOutstandingDues(
       const daysSince = Math.floor((today.getTime() - saleDate.getTime()) / MS_PER_DAY);
 
       return {
-        incomeId: sale._id,
+        incomeId: sale.id,
         buyer: sale.buyer,
         crop: sale.crop,
         totalValue,
