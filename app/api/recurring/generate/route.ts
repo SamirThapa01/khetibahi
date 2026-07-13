@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import {dbConnect} from "@/lib/mongodb";
 import RecurringExpense from "@/models/RecurringExpense";
 import Expense from "@/models/Expense";
 

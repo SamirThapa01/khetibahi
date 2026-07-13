@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import dbConnect from "@/lib/mongodb";
+import {dbConnect} from "@/lib/mongodb";
 import { getCurrentUser } from "@/lib/session";
 import RecurringExpense from "@/models/RecurringExpense";
 
