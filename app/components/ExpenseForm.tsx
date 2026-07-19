@@ -9,9 +9,12 @@
 import { useState, useEffect } from "react";
 import { X, Save } from "lucide-react";
 import { ExpenseFormData } from "@/app/types";
-import { CATEGORIES, CROPS, SEASONS } from "@/app/utils/constants"; 
+import { CATEGORIES, SEASONS } from "@/app/utils/constants";
 import { todayISO } from "@/app/utils/helpers";
 import ImageUploadField from "@/app/components/ImageUploadField";
+import { useCrops } from "@/app/hooks/useCrops";
+
+const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
 
 interface ExpenseFormProps {
   onSubmit: (data: ExpenseFormData) => void;
@@ -31,6 +34,26 @@ const EMPTY: ExpenseFormData = {
 export default function ExpenseForm({ onSubmit, onCancel, initialData }: ExpenseFormProps) {
   const [form, setForm] = useState<ExpenseFormData>(initialData ?? EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof ExpenseFormData, string>>>({});
+  const { crops, addCrop } = useCrops();
+  const [addingCrop, setAddingCrop] = useState(false);
+  const [newCropName, setNewCropName] = useState("");
+  const [newCropEmoji, setNewCropEmoji] = useState("🌱");
+  const [cropError, setCropError] = useState("");
+
+  async function handleAddCrop() {
+    setCropError("");
+    try {
+      const created = await addCrop(newCropName, newCropEmoji);
+      if (created) {
+        set("crop", created.value);
+        setAddingCrop(false);
+        setNewCropName("");
+        setNewCropEmoji("🌱");
+      }
+    } catch (err) {
+      setCropError(err instanceof Error ? err.message : "Could not add vegetable.");
+    }
+  }
 
   // If editing, sync when initialData changes
   useEffect(() => {
@@ -118,17 +141,66 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
             <label className="block text-sm font-medium text-ink-muted mb-1">
               Crop
             </label>
-            <select
-              value={form.crop}
-              onChange={(e) => set("crop", e.target.value as ExpenseFormData["crop"])}
-              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-            >
-              {CROPS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.emoji} {c.label}
-                </option>
-              ))}
-            </select>
+            {!addingCrop ? (
+              <select
+                value={form.crop}
+                onChange={(e) => {
+                  if (e.target.value === "__add_new__") {
+                    setAddingCrop(true);
+                  } else {
+                    set("crop", e.target.value as ExpenseFormData["crop"]);
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              >
+                {crops.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.emoji} {c.label}
+                  </option>
+                ))}
+                <option value="__add_new__">➕ Add new vegetable…</option>
+              </select>
+            ) : (
+              <div className="border border-line rounded-xl p-3 space-y-2 bg-surface-2">
+                <div className="flex gap-2">
+                  <select
+                    value={newCropEmoji}
+                    onChange={(e) => setNewCropEmoji(e.target.value)}
+                    className="w-16 px-2 py-2 rounded-xl border border-line bg-surface text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  >
+                    {COMMON_EMOJIS.map((em) => (
+                      <option key={em} value={em}>{em}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newCropName}
+                    onChange={(e) => setNewCropName(e.target.value)}
+                    placeholder="e.g. Bhindi, Karela…"
+                    className="flex-1 px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  />
+                </div>
+                {cropError && <p className="text-negative text-xs">{cropError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setAddingCrop(false); setCropError(""); }}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-line text-ink-muted text-xs font-medium hover:bg-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddCrop}
+                    disabled={!newCropName.trim()}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-dark disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                  >
+                    Add & select
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Season */}

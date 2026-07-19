@@ -15,20 +15,13 @@ export type ExpenseCategory =
   | "Equipment"
   | "Miscellaneous";
 
-/** Crops the farmer might track */
-export type CropType =
-  | "Tomato"
-  | "Potato"
-  | "Cauliflower"
-  | "Onion"
-  | "Cabbage"
-  | "Spinach"
-  | "Coriander"
-  | "French Bean"
-  | "Khursani"
-  | "Kakro"
-  | "Farshi"
-  | "Other";
+/**
+ * Crops the farmer might track. This used to be a fixed union of names,
+ * but farmers can now add their own vegetables (see app/hooks/useCrops.ts
+ * and /api/crops), so it's just `string` — the built-in list in
+ * app/utils/constants.ts is a set of *defaults*, not the full set anymore.
+ */
+export type CropType = string;
 
 /** A single expense record */
 export interface Expense {

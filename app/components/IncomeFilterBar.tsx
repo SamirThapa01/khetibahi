@@ -7,7 +7,7 @@
 
 import { Search, X } from "lucide-react";
 import { IncomeFilters } from "@/app/hooks/useIncome";
-import { CROPS } from "@/app/utils/constants";
+import { useCrops } from "@/app/hooks/useCrops";
 import { format, subMonths } from "date-fns";
 
 interface IncomeFilterBarProps {
@@ -26,6 +26,7 @@ function monthOptions() {
 }
 
 export default function IncomeFilterBar({ filters, onFilter, onReset }: IncomeFilterBarProps) {
+  const { crops } = useCrops();
   const hasActiveFilters =
     filters.crop !== "All" || filters.month !== "" || filters.search !== "" || filters.status !== "All";
 
@@ -49,7 +50,7 @@ export default function IncomeFilterBar({ filters, onFilter, onReset }: IncomeFi
           className="flex-1 min-w-[130px] px-3 py-1.5 text-sm rounded-xl border border-line bg-surface text-ink-muted focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         >
           <option value="All">All Crops</option>
-          {CROPS.filter((c) => c.value !== "All Crops").map((c) => (
+          {crops.filter((c) => c.value !== "All Crops").map((c) => (
             <option key={c.value} value={c.value}>
               {c.emoji} {c.label}
             </option>

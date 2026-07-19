@@ -7,7 +7,8 @@
 
 import { Search, X } from "lucide-react";
 import { ExpenseFilters } from "@/app/hooks/useExpenses";
-import { CATEGORIES, CROPS } from "@/app/utils/constants";
+import { CATEGORIES } from "@/app/utils/constants";
+import { useCrops } from "@/app/hooks/useCrops";
 import { format, subMonths } from "date-fns";
 
 interface FilterBarProps {
@@ -27,6 +28,7 @@ function monthOptions() {
 }
 
 export default function FilterBar({ filters, onFilter, onReset }: FilterBarProps) {
+  const { crops } = useCrops();
   const hasActiveFilters =
     filters.category !== "All" ||
     filters.crop !== "All" ||
@@ -70,7 +72,7 @@ export default function FilterBar({ filters, onFilter, onReset }: FilterBarProps
           className="flex-1 min-w-[120px] px-3 py-1.5 text-sm rounded-xl border border-line bg-surface text-ink-muted focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
         >
           <option value="All">All Crops</option>
-          {CROPS.filter((c) => c.value !== "All Crops").map((c) => (
+          {crops.filter((c) => c.value !== "All Crops").map((c) => (
             <option key={c.value} value={c.value}>
               {c.emoji} {c.label}
             </option>

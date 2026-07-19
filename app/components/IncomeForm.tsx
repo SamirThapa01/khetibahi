@@ -10,9 +10,12 @@
 import { useState, useEffect } from "react";
 import { X, Save, CheckCircle2, Clock3, CircleDollarSign } from "lucide-react";
 import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
-import { CROPS, SEASONS } from "@/app/utils/constants";
+import { SEASONS } from "@/app/utils/constants";
 import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
 import ImageUploadField from "@/app/components/ImageUploadField";
+import { useCrops } from "@/app/hooks/useCrops";
+
+const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
 
 interface IncomeFormProps {
   onSubmit: (data: IncomeFormData) => void;
@@ -30,12 +33,31 @@ const EMPTY: IncomeFormData = {
   note: "",
 };
 
-// Income is always for a specific crop — "All Crops" doesn't make sense for a sale
-const SALE_CROPS = CROPS.filter((c) => c.value !== "All Crops");
-
 export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFormProps) {
   const [form, setForm] = useState<IncomeFormData>(initialData ?? EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof IncomeFormData, string>>>({});
+  const { crops, addCrop } = useCrops();
+  // Income is always for a specific crop — "All Crops" doesn't make sense for a sale
+  const SALE_CROPS = crops.filter((c) => c.value !== "All Crops");
+  const [addingCrop, setAddingCrop] = useState(false);
+  const [newCropName, setNewCropName] = useState("");
+  const [newCropEmoji, setNewCropEmoji] = useState("🌱");
+  const [cropError, setCropError] = useState("");
+
+  async function handleAddCrop() {
+    setCropError("");
+    try {
+      const created = await addCrop(newCropName, newCropEmoji);
+      if (created) {
+        set("crop", created.value as CropType);
+        setAddingCrop(false);
+        setNewCropName("");
+        setNewCropEmoji("🌱");
+      }
+    } catch (err) {
+      setCropError(err instanceof Error ? err.message : "Could not add vegetable.");
+    }
+  }
   // Which payment-status pill is active. Drives amountPaid: "Paid" always
   // tracks the live total, "Due" is always 0, "Partial" is whatever the
   // farmer types in. New sales default to "Paid" since that's the common case.
@@ -150,7 +172,56 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
                   {c.label}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setAddingCrop(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm border border-dashed border-ink-faint text-ink-muted hover:border-brand hover:text-brand transition-all"
+              >
+                ➕ Add new
+              </button>
             </div>
+
+            {addingCrop && (
+              <div className="mt-2 border border-line rounded-xl p-3 space-y-2 bg-surface-2">
+                <div className="flex gap-2">
+                  <select
+                    value={newCropEmoji}
+                    onChange={(e) => setNewCropEmoji(e.target.value)}
+                    className="w-16 px-2 py-2 rounded-xl border border-line bg-surface text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  >
+                    {COMMON_EMOJIS.map((em) => (
+                      <option key={em} value={em}>{em}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newCropName}
+                    onChange={(e) => setNewCropName(e.target.value)}
+                    placeholder="e.g. Bhindi, Karela…"
+                    className="flex-1 px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  />
+                </div>
+                {cropError && <p className="text-negative text-xs">{cropError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setAddingCrop(false); setCropError(""); }}
+                    className="flex-1 px-3 py-1.5 rounded-lg border border-line text-ink-muted text-xs font-medium hover:bg-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddCrop}
+                    disabled={!newCropName.trim()}
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-brand hover:bg-brand-dark disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+                  >
+                    Add & select
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           {/* Season */}
           <div>

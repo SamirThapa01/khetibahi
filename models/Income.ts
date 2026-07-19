@@ -27,7 +27,7 @@ export interface IIncome {
   _id: string;
   userId: Types.ObjectId;
   date: string;          // "YYYY-MM-DD"
-  crop: typeof CROP_VALUES[number];
+  crop: string; // built-ins + whatever the farmer has added via /api/crops
   buyer: string;
   quantityKg: number;
   ratePerKg: number;
@@ -43,7 +43,7 @@ const IncomeSchema = new Schema<IIncome>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     date: { type: String, required: true },
-    crop: { type: String, enum: CROP_VALUES, required: true },
+    crop: { type: String, trim: true, required: true }, // no enum — custom crops from /api/crops are allowed
     buyer: { type: String, required: true, trim: true },
     quantityKg: { type: Number, required: true, min: 0 },
     ratePerKg: { type: Number, required: true, min: 0 },
