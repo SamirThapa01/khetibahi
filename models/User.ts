@@ -13,6 +13,7 @@ export interface IUser {
   email: string;
   passwordHash: string;
   profileImage?: string; // optional profile photo, stored as a base64 data URL
+  dismissedNotificationIds: string[]; // notification bell items the farmer has cleared
   createdAt: Date;
 }
 
@@ -28,6 +29,7 @@ const UserSchema = new Schema<IUser>(
     },
     passwordHash: { type: String, required: true },
     profileImage: { type: String, default: "" },
+    dismissedNotificationIds: { type: [String], default: [] },
   },
   { timestamps: true }
 );
