@@ -1,0 +1,788 @@
+diff --git a/app/api/loans/[id]/interest/route.ts b/app/api/loans/[id]/interest/route.ts
+new file mode 100644
+index 0000000..7f9fa89
+--- /dev/null
++++ b/app/api/loans/[id]/interest/route.ts
+@@ -0,0 +1,66 @@
++// ─────────────────────────────────────────────
++//  /api/loans/[id]/interest
++//  POST → log a single interest payment against a loan
++//
++//  Kept separate from PUT /api/loans/[id] so the client
++//  doesn't have to resend the whole loan just to append one
++//  interest payment — a $push is also safer under concurrent
++//  edits than "read the array, add one, write the whole array back."
++// ─────────────────────────────────────────────
++
++import { NextRequest, NextResponse } from "next/server";
++import { dbConnect } from "@/lib/mongodb";
++import { Loan } from "@/models/Loan";
++import { getCurrentUser } from "@/lib/session";
++
++export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  try {
++    const { id } = await params;
++    const body = await req.json();
++    const { date, amount } = body;
++
++    if (!date || typeof date !== "string") {
++      return NextResponse.json({ error: "Date is required." }, { status: 400 });
++    }
++    if (typeof amount !== "number" || amount <= 0) {
++      return NextResponse.json({ error: "Amount must be a positive number." }, { status: 400 });
++    }
++
++    await dbConnect();
++
++    // Same ownership-scoped query pattern as every other route in this
++    // app: one query that's simultaneously "find this loan" AND "only if
++    // it's yours." No match → 404, not 403.
++    const updated = await Loan.findOneAndUpdate(
++      { _id: id, userId: user.userId },
++      { $push: { interestPayments: { date, amount } } },
++      { new: true, runValidators: true }
++    );
++
++    if (!updated) {
++      return NextResponse.json({ error: "Loan not found." }, { status: 404 });
++    }
++
++    return NextResponse.json({
++      id: updated._id.toString(),
++      lenderName: updated.lenderName,
++      source: updated.source,
++      crop: updated.crop || undefined,
++      amount: updated.amount,
++      amountRepaid: updated.amountRepaid,
++      dateTaken: updated.dateTaken,
++      dueDate: updated.dueDate || undefined,
++      interestRate: updated.interestRate ?? 0,
++      interestPayments: updated.interestPayments ?? [],
++      note: updated.note,
++      billImage: updated.billImage || undefined,
++      createdAt: updated.createdAt.toISOString(),
++    });
++  } catch (err) {
++    console.error("record interest payment error:", err);
++    return NextResponse.json({ error: "Could not record interest payment." }, { status: 500 });
++  }
++}
+diff --git a/app/api/loans/[id]/route.ts b/app/api/loans/[id]/route.ts
+index a4d3815..cd29f0c 100644
+--- a/app/api/loans/[id]/route.ts
++++ b/app/api/loans/[id]/route.ts
+@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+   try {
+     const { id } = await params;
+     const body = await req.json();
+-    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
++    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, interestRate, note, billImage } = body;
+ 
+     if (source !== undefined && !LOAN_SOURCES.includes(source)) {
+       return NextResponse.json({ error: "Invalid source." }, { status: 400 });
+@@ -31,6 +31,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+         { status: 400 }
+       );
+     }
++    if (interestRate !== undefined && (typeof interestRate !== "number" || interestRate < 0)) {
++      return NextResponse.json({ error: "Interest rate can't be negative." }, { status: 400 });
++    }
+ 
+     await dbConnect();
+ 
+@@ -48,6 +51,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+         amountRepaid,
+         dateTaken,
+         dueDate: dueDate || undefined,
++        interestRate: interestRate ?? 0,
+         note,
+         billImage: billImage ?? "",
+       },
+@@ -67,6 +71,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+       amountRepaid: updated.amountRepaid,
+       dateTaken: updated.dateTaken,
+       dueDate: updated.dueDate || undefined,
++      interestRate: updated.interestRate ?? 0,
++      interestPayments: updated.interestPayments ?? [],
+       note: updated.note,
+       billImage: updated.billImage || undefined,
+       createdAt: updated.createdAt.toISOString(),
+diff --git a/app/api/loans/route.ts b/app/api/loans/route.ts
+index 07d68b3..41aef6f 100644
+--- a/app/api/loans/route.ts
++++ b/app/api/loans/route.ts
+@@ -21,6 +21,8 @@ function serialize(doc: HydratedDocument<ILoan>) {
+     amountRepaid: doc.amountRepaid,
+     dateTaken: doc.dateTaken,
+     dueDate: doc.dueDate || undefined,
++    interestRate: doc.interestRate ?? 0,
++    interestPayments: doc.interestPayments ?? [],
+     note: doc.note,
+     billImage: doc.billImage || undefined,
+     createdAt: doc.createdAt.toISOString(),
+@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
+ 
+   try {
+     const body = await req.json();
+-    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
++    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, interestRate, note, billImage } = body;
+ 
+     if (!lenderName || typeof lenderName !== "string" || !lenderName.trim()) {
+       return NextResponse.json({ error: "Lender name is required." }, { status: 400 });
+@@ -65,6 +67,9 @@ export async function POST(req: NextRequest) {
+         { status: 400 }
+       );
+     }
++    if (interestRate !== undefined && (typeof interestRate !== "number" || interestRate < 0)) {
++      return NextResponse.json({ error: "Interest rate can't be negative." }, { status: 400 });
++    }
+     if (source !== undefined && !LOAN_SOURCES.includes(source)) {
+       return NextResponse.json({ error: "Invalid source." }, { status: 400 });
+     }
+@@ -82,6 +87,7 @@ export async function POST(req: NextRequest) {
+       amountRepaid: amountRepaid ?? 0,
+       dateTaken,
+       dueDate: dueDate || undefined,
++      interestRate: interestRate ?? 0,
+       note: note ?? "",
+       billImage: billImage ?? "",
+     });
+diff --git a/app/components/LoanForm.tsx b/app/components/LoanForm.tsx
+index ab9420f..982fccf 100644
+--- a/app/components/LoanForm.tsx
++++ b/app/components/LoanForm.tsx
+@@ -30,6 +30,7 @@ const EMPTY: LoanFormData = {
+   amountRepaid: 0,
+   dateTaken: todayISO(),
+   dueDate: undefined,
++  interestRate: 0,
+   note: "",
+ };
+ 
+@@ -210,6 +211,29 @@ export default function LoanForm({ onSubmit, onCancel, initialData }: LoanFormPr
+             {errors.amount && <p className="text-negative text-xs mt-1">{errors.amount}</p>}
+           </div>
+ 
++          {/* Interest rate (optional) */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">
++              Interest rate <span className="text-ink-faint">(% per year, optional)</span>
++            </label>
++            <div className="relative">
++              <input
++                type="number"
++                min={0}
++                step="0.1"
++                value={form.interestRate || ""}
++                onChange={(e) => set("interestRate", Number(e.target.value))}
++                placeholder="0"
++                className="w-full pl-3 pr-8 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">%</span>
++            </div>
++            <p className="text-xs text-ink-faint mt-1">
++              Leave at 0 if this udhaar doesn&apos;t carry interest. You can log interest payments
++              separately once it&apos;s saved.
++            </p>
++          </div>
++
+           {/* Repayment status */}
+           <div>
+             <label className="block text-sm font-medium text-ink-muted mb-1.5">Repayment status</label>
+diff --git a/app/components/Navbar.tsx b/app/components/Navbar.tsx
+index 9aaf107..84c9a86 100644
+--- a/app/components/Navbar.tsx
++++ b/app/components/Navbar.tsx
+@@ -6,19 +6,21 @@
+ //  Only visible on small screens (sm:hidden).
+ //  The desktop sidebar (Sidebar.tsx) + TopBar
+ //  handle navigation on larger screens.
++//
++//  Only the 5 most-used destinations live here —
++//  8 tabs in one row was too tight on small screens.
++//  Udhaar, Budgets, and Recurring now live behind
++//  the gear icon in TopBar.tsx instead.
+ // ─────────────────────────────────────────────
+ 
+ import Link from "next/link";
+ import { usePathname } from "next/navigation";
+-import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf, PiggyBank, Repeat, HandCoins } from "lucide-react";
++import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf } from "lucide-react";
+ 
+ const NAV = [
+   { href: "/",          label: "Home",      Icon: LayoutDashboard },
+   { href: "/income",    label: "Income",    Icon: Coins           },
+   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+-  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
+-  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+-{ href: "/recurring", label: "Recurring", Icon: Repeat          },
+   { href: "/crops",     label: "Crops",     Icon: Leaf            },
+   { href: "/analytics", label: "Stats",     Icon: BarChart2       },
+ ];
+diff --git a/app/components/RecordInterestPaymentModal.tsx b/app/components/RecordInterestPaymentModal.tsx
+new file mode 100644
+index 0000000..38c7525
+--- /dev/null
++++ b/app/components/RecordInterestPaymentModal.tsx
+@@ -0,0 +1,132 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – RecordInterestPaymentModal
++//
++//  Same idea as RecordRepaymentModal, but for interest
++//  instead of principal — these are tracked separately
++//  since a lender may charge interest on top of the
++//  amount owed. Interest accrued is an estimate (simple
++//  interest on the outstanding principal since the loan
++//  was taken), so this lets the farmer type in whatever
++//  the lender actually asked for, defaulting to that estimate.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState } from "react";
++import { X, Percent } from "lucide-react";
++import { Loan } from "@/app/types";
++import { formatNPR, calculateAccruedInterest, totalInterestPaid, todayISO } from "@/app/utils/helpers";
++
++interface RecordInterestPaymentModalProps {
++  loan: Loan;
++  onConfirm: (date: string, amount: number) => void;
++  onCancel: () => void;
++}
++
++export default function RecordInterestPaymentModal({
++  loan,
++  onConfirm,
++  onCancel,
++}: RecordInterestPaymentModalProps) {
++  const accrued = calculateAccruedInterest(loan);
++  const alreadyPaid = totalInterestPaid(loan);
++  const estimatedDue = Math.max(accrued - alreadyPaid, 0);
++
++  const [date, setDate] = useState(todayISO());
++  const [amount, setAmount] = useState<number>(Math.round(estimatedDue) || 0);
++  const [error, setError] = useState<string | null>(null);
++
++  function handleConfirm() {
++    if (!date) {
++      setError("Pick a date.");
++      return;
++    }
++    if (amount <= 0) {
++      setError("Enter an amount greater than zero.");
++      return;
++    }
++    onConfirm(date, amount);
++  }
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
++      <div className="bg-surface rounded-3xl shadow-lift w-full max-w-sm">
++        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
++          <h2 className="text-lg font-display font-bold text-ink flex items-center gap-2">
++            <Percent className="w-5 h-5 text-brand" />
++            Record Interest Payment
++          </h2>
++          <button onClick={onCancel} className="p-1.5 rounded-full text-ink-faint hover:bg-surface-2">
++            <X className="w-4 h-4" />
++          </button>
++        </div>
++
++        <div className="p-6 space-y-4">
++          <p className="text-sm text-ink-muted">
++            At <span className="font-semibold text-ink">{loan.interestRate}%/year</span>, interest
++            accrued so far on this udhaar is about{" "}
++            <span className="font-semibold text-accent tabular-nums">{formatNPR(Math.round(accrued))}</span>
++            {alreadyPaid > 0 && (
++              <>
++                {" "}({formatNPR(Math.round(alreadyPaid))} already paid, roughly{" "}
++                {formatNPR(Math.round(estimatedDue))} outstanding)
++              </>
++            )}
++            .
++          </p>
++
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Date paid</label>
++            <input
++              type="date"
++              value={date}
++              max={todayISO()}
++              onChange={(e) => { setDate(e.target.value); setError(null); }}
++              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++            />
++          </div>
++
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Interest amount paid</label>
++            <div className="relative">
++              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
++              <input
++                type="number"
++                min={0}
++                autoFocus
++                value={amount || ""}
++                onChange={(e) => { setAmount(Number(e.target.value)); setError(null); }}
++                className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++            </div>
++            {error && <p className="text-negative text-xs mt-1">{error}</p>}
++            {estimatedDue > 0 && Math.round(estimatedDue) !== amount && (
++              <button
++                type="button"
++                onClick={() => { setAmount(Math.round(estimatedDue)); setError(null); }}
++                className="text-xs text-brand font-medium mt-1.5 hover:underline"
++              >
++                Use the estimated {formatNPR(Math.round(estimatedDue))}
++              </button>
++            )}
++          </div>
++
++          <div className="flex gap-3 pt-1">
++            <button
++              onClick={onCancel}
++              className="flex-1 px-4 py-2.5 rounded-xl border border-line text-ink-muted text-sm font-medium hover:bg-surface-2 transition-colors"
++            >
++              Cancel
++            </button>
++            <button
++              onClick={handleConfirm}
++              className="flex-1 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
++            >
++              Save Payment
++            </button>
++          </div>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/app/components/TopBar.tsx b/app/components/TopBar.tsx
+index c858b87..3d2f30f 100644
+--- a/app/components/TopBar.tsx
++++ b/app/components/TopBar.tsx
+@@ -10,21 +10,36 @@
+ //  Only shown when logged in and not on auth pages.
+ // ─────────────────────────────────────────────
+ 
++import { useState } from "react";
+ import { usePathname } from "next/navigation";
+ import Link from "next/link";
+-import { Search, Moon, Sun, Bell, ChevronDown } from "lucide-react";
++import { Search, Moon, Sun, Bell, ChevronDown, Settings, PiggyBank, Repeat, HandCoins, X } from "lucide-react";
+ import { useDarkMode } from "@/app/hooks/useDarkMode";
+ import { useAuth } from "@/app/context/AuthContext";
+ 
+ const AUTH_PAGES = ["/login", "/signup"];
+ 
++// Destinations that don't fit on the mobile bottom nav (Navbar.tsx) —
++// reachable from here instead via the gear icon (mobile only; on
++// desktop the Sidebar already lists every route).
++const MORE_NAV = [
++  { href: "/loans",     label: "Udhaar",    Icon: HandCoins },
++  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank },
++  { href: "/recurring", label: "Recurring", Icon: Repeat    },
++];
++
+ export default function TopBar() {
+   const pathname       = usePathname();
+   const { isDark, toggle } = useDarkMode();
+   const { user }       = useAuth();
++  const [moreOpen, setMoreOpen] = useState(false);
+ 
+   if (AUTH_PAGES.includes(pathname) || !user) return null;
+ 
++  const moreIsActive = MORE_NAV.some(
++    ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
++  );
++
+   // Build initials: "Ram Bahadur" → "RB"
+   const initials = user.name
+     .split(" ")
+@@ -46,6 +61,19 @@ export default function TopBar() {
+ 
+       {/* Right side */}
+       <div className="flex items-center gap-1 ml-auto">
++        {/* Gear — mobile only. Opens the overflow sheet for routes that
++            don't fit on the bottom tab bar (desktop Sidebar already
++            lists these, so the button is hidden there). */}
++        <button
++          onClick={() => setMoreOpen(true)}
++          aria-label="More menu"
++          className={`sm:hidden p-2 rounded-xl transition-colors ${
++            moreIsActive ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
++          }`}
++        >
++          <Settings className="w-4 h-4" />
++        </button>
++
+         {/* Dark mode toggle */}
+         <button
+           onClick={toggle}
+@@ -88,6 +116,44 @@ export default function TopBar() {
+           <ChevronDown className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
+         </Link>
+       </div>
++
++      {/* Overflow sheet — gear icon opens this (mobile only) */}
++      {moreOpen && (
++        <div
++          className="sm:hidden fixed inset-0 z-50 bg-black/40"
++          onClick={() => setMoreOpen(false)}
++        >
++          <div
++            className="absolute bottom-0 inset-x-0 bg-surface border-t border-line rounded-t-2xl shadow-lift p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
++            onClick={(e) => e.stopPropagation()}
++          >
++            <div className="flex items-center justify-between px-2 py-1 mb-1">
++              <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">More</span>
++              <button onClick={() => setMoreOpen(false)} aria-label="Close" className="p-1 text-ink-faint">
++                <X className="w-4 h-4" />
++              </button>
++            </div>
++            <div className="grid grid-cols-3 gap-1">
++              {MORE_NAV.map(({ href, label, Icon }) => {
++                const active = pathname === href || pathname.startsWith(`${href}/`);
++                return (
++                  <Link
++                    key={href}
++                    href={href}
++                    onClick={() => setMoreOpen(false)}
++                    className={`flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors ${
++                      active ? "text-brand bg-brand/10" : "text-ink-faint"
++                    }`}
++                  >
++                    <Icon className="w-5 h-5" />
++                    {label}
++                  </Link>
++                );
++              })}
++            </div>
++          </div>
++        </div>
++      )}
+     </header>
+   );
+ }
+diff --git a/app/hooks/useLoans.ts b/app/hooks/useLoans.ts
+index 6aed65b..f88dcfc 100644
+--- a/app/hooks/useLoans.ts
++++ b/app/hooks/useLoans.ts
+@@ -150,6 +150,7 @@ export function useLoans() {
+         amountRepaid: newAmountRepaid,
+         dateTaken: target.dateTaken,
+         dueDate: target.dueDate,
++        interestRate: target.interestRate,
+         note: target.note,
+         billImage: target.billImage,
+       });
+@@ -157,6 +158,37 @@ export function useLoans() {
+     [loans, updateLoan]
+   );
+ 
++  /**
++   * Quick "Record Interest Payment" action — logs one interest payment
++   * against a loan via its own endpoint (so we don't have to resend the
++   * whole loan just to append one entry). No show() call here either,
++   * for the same reason as recordRepayment — avoid double-toasting.
++   */
++  const recordInterestPayment = useCallback(
++    async (id: string, date: string, amount: number): Promise<void> => {
++      try {
++        const res = await fetch(`/api/loans/${id}/interest`, {
++          method: "POST",
++          headers: { "Content-Type": "application/json" },
++          body: JSON.stringify({ date, amount }),
++        });
++        if (!res.ok) {
++          const body = await res.json().catch(() => ({}));
++          show("error", body.error ?? "Could not record interest payment");
++          throw new Error(body.error ?? "Could not record interest payment.");
++        }
++        const updated: Loan = await res.json();
++        setLoans((prev) => prev.map((l) => (l.id === id ? updated : l)));
++        setError(null);
++        show("success", "Interest payment recorded");
++      } catch (err) {
++        console.error(err);
++        setError(err instanceof Error ? err.message : "Could not record interest payment.");
++      }
++    },
++    [show]
++  );
++
+   // ── Filtering ─────────────────────────────
+ 
+   const filteredLoans = useMemo<Loan[]>(() => {
+@@ -200,6 +232,7 @@ export function useLoans() {
+     updateLoan,
+     deleteLoan,
+     recordRepayment,
++    recordInterestPayment,
+ 
+     filters,
+     setFilter,
+diff --git a/app/loans/page.tsx b/app/loans/page.tsx
+index 0736bc6..b4523df 100644
+--- a/app/loans/page.tsx
++++ b/app/loans/page.tsx
+@@ -23,15 +23,25 @@ import {
+   CircleDollarSign,
+   Clock3,
+   HandCoins,
++  Percent,
+ } from "lucide-react";
+ import { useLoans } from "@/app/hooks/useLoans";
+ import LoanForm from "@/app/components/LoanForm";
+ import LoanFilterBar from "@/app/components/LoanFilterBar";
+ import RecordRepaymentModal from "@/app/components/RecordRepaymentModal";
++import RecordInterestPaymentModal from "@/app/components/RecordInterestPaymentModal";
+ import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
+ import ImageLightbox from "@/app/components/ImageLightbox";
+ import { Loan, LoanFormData } from "@/app/types";
+-import { formatNPR, getLoanStatus, amountDueForLoan, prettyDate } from "@/app/utils/helpers";
++import {
++  formatNPR,
++  getLoanStatus,
++  amountDueForLoan,
++  prettyDate,
++  calculateAccruedInterest,
++  totalInterestPaid,
++  interestDueForLoan,
++} from "@/app/utils/helpers";
+ import { LOAN_SOURCES } from "@/app/utils/constants";
+ 
+ // Visual language for each repayment status — reused across the badge and the stat card
+@@ -52,6 +62,7 @@ export default function LoansPage() {
+     updateLoan,
+     deleteLoan,
+     recordRepayment,
++    recordInterestPayment,
+     filters,
+     setFilter,
+     resetFilters,
+@@ -60,11 +71,12 @@ export default function LoansPage() {
+   const [showForm, setShowForm] = useState(false);
+   const [editing, setEditing] = useState<Loan | null>(null);
+   const [repaying, setRepaying] = useState<Loan | null>(null);
++  const [interestPaying, setInterestPaying] = useState<Loan | null>(null);
+   const [deleteTarget, setDeleteTarget] = useState<{ id: string; lenderName: string } | null>(null);
+   const [isDeleting, setIsDeleting] = useState(false);
+   const [showBillFor, setShowBillFor] = useState<string | null>(null);
+ 
+-  const isAnyModalOpen = showForm || repaying !== null || deleteTarget !== null;
++  const isAnyModalOpen = showForm || repaying !== null || interestPaying !== null || deleteTarget !== null;
+ 
+   // 🔒 Lock background scroll while a modal is open — same pattern as Income/Expenses pages.
+   useEffect(() => {
+@@ -124,6 +136,11 @@ export default function LoansPage() {
+     setRepaying(null);
+   }
+ 
++  function handleConfirmInterestPayment(date: string, amount: number) {
++    if (interestPaying) recordInterestPayment(interestPaying.id, date, amount);
++    setInterestPaying(null);
++  }
++
+   const totalRepaid = totalLoans - totalDue;
+   const pendingCount = statusSummary.filter((s) => s.status !== "Paid").reduce((sum, s) => sum + s.count, 0);
+ 
+@@ -297,6 +314,24 @@ export default function LoansPage() {
+                           + Record repayment
+                         </button>
+                       )}
++                      {loan.interestRate > 0 && (
++                        <div className="flex items-center gap-2 flex-wrap mt-1">
++                          <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
++                            <Percent className="w-3 h-3" />
++                            {loan.interestRate}%/yr · {formatNPR(Math.round(calculateAccruedInterest(loan)))} accrued
++                            {totalInterestPaid(loan) > 0 &&
++                              ` · ${formatNPR(Math.round(totalInterestPaid(loan)))} paid`}
++                            {interestDueForLoan(loan) > 0 &&
++                              ` · ${formatNPR(Math.round(interestDueForLoan(loan)))} due`}
++                          </span>
++                          <button
++                            onClick={() => setInterestPaying(loan)}
++                            className="text-[11px] font-medium text-brand hover:underline"
++                          >
++                            + Record interest payment
++                          </button>
++                        </div>
++                      )}
+                     </div>
+ 
+                     <div className="text-right flex-shrink-0">
+@@ -345,6 +380,7 @@ export default function LoansPage() {
+                   amountRepaid: editing.amountRepaid,
+                   dateTaken: editing.dateTaken,
+                   dueDate: editing.dueDate,
++                  interestRate: editing.interestRate,
+                   note: editing.note,
+                   billImage: editing.billImage,
+                 }
+@@ -362,6 +398,15 @@ export default function LoansPage() {
+         />
+       )}
+ 
++      {/* Modal: quick record-interest-payment — also a sibling */}
++      {interestPaying && (
++        <RecordInterestPaymentModal
++          loan={interestPaying}
++          onConfirm={handleConfirmInterestPayment}
++          onCancel={() => setInterestPaying(null)}
++        />
++      )}
++
+       {/* Modal: delete confirmation */}
+       {deleteTarget && (
+         <ConfirmDeleteModal
+diff --git a/app/types/index.ts b/app/types/index.ts
+index ae0cbae..a138871 100644
+--- a/app/types/index.ts
++++ b/app/types/index.ts
+@@ -118,6 +118,16 @@ export interface PaymentStatusSummary {
+  */
+ export type LoanSource = "Agrovet" | "Cooperative" | "Bank" | "Relative/Neighbor" | "Other";
+ 
++/**
++ * A single interest payment made toward a loan — logged separately from
++ * principal repayment (amountRepaid) since interest and principal are
++ * different debts to a lender.
++ */
++export interface InterestPayment {
++  date: string;   // "YYYY-MM-DD"
++  amount: number;
++}
++
+ /**
+  * A single credit/loan record — money the farmer OWES, not earns.
+  * Mirrors Income's amountPaid/total shape, just flipped: amountRepaid
+@@ -132,13 +142,17 @@ export interface Loan {
+   amountRepaid: number;    // how much has been paid back so far
+   dateTaken: string;       // "YYYY-MM-DD"
+   dueDate?: string;        // "YYYY-MM-DD" — optional
++  interestRate: number;    // annual simple-interest rate (%), e.g. 12 = 12%/year. 0 = no interest.
++  interestPayments: InterestPayment[]; // interest paid over time
+   note: string;
+   billImage?: string;      // optional receipt/chit photo, stored as a base64 data URL
+   createdAt: string;
+ }
+ 
+-/** What the add/edit loan form holds before it becomes a Loan record */
+-export type LoanFormData = Omit<Loan, "id" | "createdAt">;
++/** What the add/edit loan form holds before it becomes a Loan record.
++ *  interestPayments is excluded — that's appended one at a time via
++ *  recordInterestPayment, never edited wholesale through this form. */
++export type LoanFormData = Omit<Loan, "id" | "createdAt" | "interestPayments">;
+ 
+ /** Rolled-up totals per repayment status, mirrors PaymentStatusSummary */
+ export interface LoanStatusSummary {
+diff --git a/app/utils/helpers.ts b/app/utils/helpers.ts
+index 52dc4c3..065f9e9 100644
+--- a/app/utils/helpers.ts
++++ b/app/utils/helpers.ts
+@@ -143,6 +143,53 @@ export function amountDueForLoan(loan: Pick<Loan, "amount" | "amountRepaid">): n
+   return Math.max(loan.amount - loan.amountRepaid, 0);
+ }
+ 
++// ── Interest helpers ──────────────────────────
++// Simple interest, calculated on the loan's outstanding principal
++// (amount − amountRepaid) for the number of days since it was taken:
++//   interest = outstandingPrincipal × (rate / 100) × (daysElapsed / 365)
++// This is an approximation (it doesn't account for the principal
++// shrinking over time as repayments come in, or compounding) but matches
++// how interest is usually talked about for informal udhaar — "12% a
++// year on what I still owe" — without needing a full amortization
++// schedule.
++
++const MS_PER_DAY_LOAN = 1000 * 60 * 60 * 24;
++
++/** Days between a "YYYY-MM-DD" date and today (never negative) */
++function daysSinceLoan(dateTaken: string): number {
++  const taken = new Date(dateTaken);
++  const today = new Date();
++  const days = Math.floor((today.getTime() - taken.getTime()) / MS_PER_DAY_LOAN);
++  return Math.max(days, 0);
++}
++
++/**
++ * Total interest accrued on a loan so far, based on its current
++ * outstanding principal, interest rate, and time since it was taken.
++ * Returns 0 for loans with no interestRate set.
++ */
++export function calculateAccruedInterest(
++  loan: Pick<Loan, "amount" | "amountRepaid" | "dateTaken" | "interestRate">
++): number {
++  if (!loan.interestRate || loan.interestRate <= 0) return 0;
++  const outstandingPrincipal = amountDueForLoan(loan);
++  if (outstandingPrincipal <= 0) return 0;
++  const days = daysSinceLoan(loan.dateTaken);
++  return outstandingPrincipal * (loan.interestRate / 100) * (days / 365);
++}
++
++/** Sum of every interest payment logged against a loan */
++export function totalInterestPaid(loan: Pick<Loan, "interestPayments">): number {
++  return (loan.interestPayments ?? []).reduce((sum, p) => sum + p.amount, 0);
++}
++
++/** Interest accrued but not yet paid (never negative) */
++export function interestDueForLoan(
++  loan: Pick<Loan, "amount" | "amountRepaid" | "dateTaken" | "interestRate" | "interestPayments">
++): number {
++  return Math.max(calculateAccruedInterest(loan) - totalInterestPaid(loan), 0);
++}
++
+ /** Roll loans up into Paid / Partial / Due buckets — powers the Loans page stat cards */
+ export function buildLoanStatusSummary(loans: Loan[]): LoanStatusSummary[] {
+   const buckets: Record<PaymentStatus, { total: number; count: number }> = {
+diff --git a/models/Loan.ts b/models/Loan.ts
+index 38257a5..79857a2 100644
+--- a/models/Loan.ts
++++ b/models/Loan.ts
+@@ -14,6 +14,12 @@ import { Schema, models, model, Types } from "mongoose";
+ export const LOAN_SOURCES = ["Agrovet", "Cooperative", "Bank", "Relative/Neighbor", "Other"] as const;
+ export type LoanSource = (typeof LOAN_SOURCES)[number];
+ 
++/** One interest payment made toward a loan, logged separately from principal repayment */
++export interface IInterestPayment {
++  date: string; // "YYYY-MM-DD"
++  amount: number;
++}
++
+ export interface ILoan {
+   _id: string;
+   userId: Types.ObjectId;
+@@ -24,11 +30,21 @@ export interface ILoan {
+   amountRepaid: number; // how much has been paid back so far
+   dateTaken: string; // "YYYY-MM-DD"
+   dueDate?: string; // "YYYY-MM-DD" — optional
++  interestRate: number; // annual simple-interest rate, e.g. 12 for 12%/year. 0 = no interest.
++  interestPayments: IInterestPayment[]; // interest paid over time, separate from principal
+   note: string;
+   billImage?: string; // optional receipt/chit photo, stored as a base64 data URL
+   createdAt: Date;
+ }
+ 
++const InterestPaymentSchema = new Schema<IInterestPayment>(
++  {
++    date: { type: String, required: true },
++    amount: { type: Number, required: true, min: 0 },
++  },
++  { _id: false }
++);
++
+ const LoanSchema = new Schema<ILoan>(
+   {
+     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+@@ -39,6 +55,8 @@ const LoanSchema = new Schema<ILoan>(
+     amountRepaid: { type: Number, required: true, min: 0, default: 0 },
+     dateTaken: { type: String, required: true },
+     dueDate: { type: String },
++    interestRate: { type: Number, min: 0, default: 0 },
++    interestPayments: { type: [InterestPaymentSchema], default: [] },
+     note: { type: String, default: "", trim: true },
+     billImage: { type: String, default: "" },
+   },

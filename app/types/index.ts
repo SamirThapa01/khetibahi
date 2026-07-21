@@ -119,6 +119,16 @@ export interface PaymentStatusSummary {
 export type LoanSource = "Agrovet" | "Cooperative" | "Bank" | "Relative/Neighbor" | "Other";
 
 /**
+ * A single interest payment made toward a loan — logged separately from
+ * principal repayment (amountRepaid) since interest and principal are
+ * different debts to a lender.
+ */
+export interface InterestPayment {
+  date: string;   // "YYYY-MM-DD"
+  amount: number;
+}
+
+/**
  * A single credit/loan record — money the farmer OWES, not earns.
  * Mirrors Income's amountPaid/total shape, just flipped: amountRepaid
  * grows toward `amount` instead of amountPaid growing toward a sale total.
@@ -132,13 +142,17 @@ export interface Loan {
   amountRepaid: number;    // how much has been paid back so far
   dateTaken: string;       // "YYYY-MM-DD"
   dueDate?: string;        // "YYYY-MM-DD" — optional
+  interestRate: number;    // annual simple-interest rate (%), e.g. 12 = 12%/year. 0 = no interest.
+  interestPayments: InterestPayment[]; // interest paid over time
   note: string;
   billImage?: string;      // optional receipt/chit photo, stored as a base64 data URL
   createdAt: string;
 }
 
-/** What the add/edit loan form holds before it becomes a Loan record */
-export type LoanFormData = Omit<Loan, "id" | "createdAt">;
+/** What the add/edit loan form holds before it becomes a Loan record.
+ *  interestPayments is excluded — that's appended one at a time via
+ *  recordInterestPayment, never edited wholesale through this form. */
+export type LoanFormData = Omit<Loan, "id" | "createdAt" | "interestPayments">;
 
 /** Rolled-up totals per repayment status, mirrors PaymentStatusSummary */
 export interface LoanStatusSummary {

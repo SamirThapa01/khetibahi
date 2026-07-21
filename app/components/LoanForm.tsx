@@ -30,6 +30,7 @@ const EMPTY: LoanFormData = {
   amountRepaid: 0,
   dateTaken: todayISO(),
   dueDate: undefined,
+  interestRate: 0,
   note: "",
 };
 
@@ -208,6 +209,29 @@ export default function LoanForm({ onSubmit, onCancel, initialData }: LoanFormPr
               />
             </div>
             {errors.amount && <p className="text-negative text-xs mt-1">{errors.amount}</p>}
+          </div>
+
+          {/* Interest rate (optional) */}
+          <div>
+            <label className="block text-sm font-medium text-ink-muted mb-1">
+              Interest rate <span className="text-ink-faint">(% per year, optional)</span>
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min={0}
+                step="0.1"
+                value={form.interestRate || ""}
+                onChange={(e) => set("interestRate", Number(e.target.value))}
+                placeholder="0"
+                className="w-full pl-3 pr-8 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">%</span>
+            </div>
+            <p className="text-xs text-ink-faint mt-1">
+              Leave at 0 if this udhaar doesn&apos;t carry interest. You can log interest payments
+              separately once it&apos;s saved.
+            </p>
           </div>
 
           {/* Repayment status */}

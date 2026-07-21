@@ -6,19 +6,21 @@
 //  Only visible on small screens (sm:hidden).
 //  The desktop sidebar (Sidebar.tsx) + TopBar
 //  handle navigation on larger screens.
+//
+//  Only the 5 most-used destinations live here —
+//  8 tabs in one row was too tight on small screens.
+//  Udhaar, Budgets, and Recurring now live behind
+//  the gear icon in TopBar.tsx instead.
 // ─────────────────────────────────────────────
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf, PiggyBank, Repeat, HandCoins } from "lucide-react";
+import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf } from "lucide-react";
 
 const NAV = [
   { href: "/",          label: "Home",      Icon: LayoutDashboard },
   { href: "/income",    label: "Income",    Icon: Coins           },
   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
-  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
-  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
-{ href: "/recurring", label: "Recurring", Icon: Repeat          },
   { href: "/crops",     label: "Crops",     Icon: Leaf            },
   { href: "/analytics", label: "Stats",     Icon: BarChart2       },
 ];

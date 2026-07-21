@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await req.json();
-    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
+    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, interestRate, note, billImage } = body;
 
     if (source !== undefined && !LOAN_SOURCES.includes(source)) {
       return NextResponse.json({ error: "Invalid source." }, { status: 400 });
@@ -30,6 +30,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         { error: "Amount repaid can't be negative or exceed the loan amount." },
         { status: 400 }
       );
+    }
+    if (interestRate !== undefined && (typeof interestRate !== "number" || interestRate < 0)) {
+      return NextResponse.json({ error: "Interest rate can't be negative." }, { status: 400 });
     }
 
     await dbConnect();
@@ -48,6 +51,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         amountRepaid,
         dateTaken,
         dueDate: dueDate || undefined,
+        interestRate: interestRate ?? 0,
         note,
         billImage: billImage ?? "",
       },
@@ -67,6 +71,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       amountRepaid: updated.amountRepaid,
       dateTaken: updated.dateTaken,
       dueDate: updated.dueDate || undefined,
+      interestRate: updated.interestRate ?? 0,
+      interestPayments: updated.interestPayments ?? [],
       note: updated.note,
       billImage: updated.billImage || undefined,
       createdAt: updated.createdAt.toISOString(),

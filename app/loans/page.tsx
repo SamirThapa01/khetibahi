@@ -23,15 +23,25 @@ import {
   CircleDollarSign,
   Clock3,
   HandCoins,
+  Percent,
 } from "lucide-react";
 import { useLoans } from "@/app/hooks/useLoans";
 import LoanForm from "@/app/components/LoanForm";
 import LoanFilterBar from "@/app/components/LoanFilterBar";
 import RecordRepaymentModal from "@/app/components/RecordRepaymentModal";
+import RecordInterestPaymentModal from "@/app/components/RecordInterestPaymentModal";
 import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
 import ImageLightbox from "@/app/components/ImageLightbox";
 import { Loan, LoanFormData } from "@/app/types";
-import { formatNPR, getLoanStatus, amountDueForLoan, prettyDate } from "@/app/utils/helpers";
+import {
+  formatNPR,
+  getLoanStatus,
+  amountDueForLoan,
+  prettyDate,
+  calculateAccruedInterest,
+  totalInterestPaid,
+  interestDueForLoan,
+} from "@/app/utils/helpers";
 import { LOAN_SOURCES } from "@/app/utils/constants";
 
 // Visual language for each repayment status — reused across the badge and the stat card
@@ -52,6 +62,7 @@ export default function LoansPage() {
     updateLoan,
     deleteLoan,
     recordRepayment,
+    recordInterestPayment,
     filters,
     setFilter,
     resetFilters,
@@ -60,11 +71,12 @@ export default function LoansPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Loan | null>(null);
   const [repaying, setRepaying] = useState<Loan | null>(null);
+  const [interestPaying, setInterestPaying] = useState<Loan | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; lenderName: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showBillFor, setShowBillFor] = useState<string | null>(null);
 
-  const isAnyModalOpen = showForm || repaying !== null || deleteTarget !== null;
+  const isAnyModalOpen = showForm || repaying !== null || interestPaying !== null || deleteTarget !== null;
 
   // 🔒 Lock background scroll while a modal is open — same pattern as Income/Expenses pages.
   useEffect(() => {
@@ -122,6 +134,11 @@ export default function LoansPage() {
   function handleConfirmRepayment(extraRepaid: number) {
     if (repaying) recordRepayment(repaying.id, extraRepaid);
     setRepaying(null);
+  }
+
+  function handleConfirmInterestPayment(date: string, amount: number) {
+    if (interestPaying) recordInterestPayment(interestPaying.id, date, amount);
+    setInterestPaying(null);
   }
 
   const totalRepaid = totalLoans - totalDue;
@@ -297,6 +314,24 @@ export default function LoansPage() {
                           + Record repayment
                         </button>
                       )}
+                      {loan.interestRate > 0 && (
+                        <div className="flex items-center gap-2 flex-wrap mt-1">
+                          <span className="inline-flex items-center gap-1 text-[11px] text-ink-faint">
+                            <Percent className="w-3 h-3" />
+                            {loan.interestRate}%/yr · {formatNPR(Math.round(calculateAccruedInterest(loan)))} accrued
+                            {totalInterestPaid(loan) > 0 &&
+                              ` · ${formatNPR(Math.round(totalInterestPaid(loan)))} paid`}
+                            {interestDueForLoan(loan) > 0 &&
+                              ` · ${formatNPR(Math.round(interestDueForLoan(loan)))} due`}
+                          </span>
+                          <button
+                            onClick={() => setInterestPaying(loan)}
+                            className="text-[11px] font-medium text-brand hover:underline"
+                          >
+                            + Record interest payment
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-right flex-shrink-0">
@@ -345,6 +380,7 @@ export default function LoansPage() {
                   amountRepaid: editing.amountRepaid,
                   dateTaken: editing.dateTaken,
                   dueDate: editing.dueDate,
+                  interestRate: editing.interestRate,
                   note: editing.note,
                   billImage: editing.billImage,
                 }
@@ -359,6 +395,15 @@ export default function LoansPage() {
           loan={repaying}
           onConfirm={handleConfirmRepayment}
           onCancel={() => setRepaying(null)}
+        />
+      )}
+
+      {/* Modal: quick record-interest-payment — also a sibling */}
+      {interestPaying && (
+        <RecordInterestPaymentModal
+          loan={interestPaying}
+          onConfirm={handleConfirmInterestPayment}
+          onCancel={() => setInterestPaying(null)}
         />
       )}
 

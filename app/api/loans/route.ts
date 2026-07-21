@@ -21,6 +21,8 @@ function serialize(doc: HydratedDocument<ILoan>) {
     amountRepaid: doc.amountRepaid,
     dateTaken: doc.dateTaken,
     dueDate: doc.dueDate || undefined,
+    interestRate: doc.interestRate ?? 0,
+    interestPayments: doc.interestPayments ?? [],
     note: doc.note,
     billImage: doc.billImage || undefined,
     createdAt: doc.createdAt.toISOString(),
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
+    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, interestRate, note, billImage } = body;
 
     if (!lenderName || typeof lenderName !== "string" || !lenderName.trim()) {
       return NextResponse.json({ error: "Lender name is required." }, { status: 400 });
@@ -65,6 +67,9 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (interestRate !== undefined && (typeof interestRate !== "number" || interestRate < 0)) {
+      return NextResponse.json({ error: "Interest rate can't be negative." }, { status: 400 });
+    }
     if (source !== undefined && !LOAN_SOURCES.includes(source)) {
       return NextResponse.json({ error: "Invalid source." }, { status: 400 });
     }
@@ -82,6 +87,7 @@ export async function POST(req: NextRequest) {
       amountRepaid: amountRepaid ?? 0,
       dateTaken,
       dueDate: dueDate || undefined,
+      interestRate: interestRate ?? 0,
       note: note ?? "",
       billImage: billImage ?? "",
     });

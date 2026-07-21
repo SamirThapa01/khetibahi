@@ -143,6 +143,53 @@ export function amountDueForLoan(loan: Pick<Loan, "amount" | "amountRepaid">): n
   return Math.max(loan.amount - loan.amountRepaid, 0);
 }
 
+// ── Interest helpers ──────────────────────────
+// Simple interest, calculated on the loan's outstanding principal
+// (amount − amountRepaid) for the number of days since it was taken:
+//   interest = outstandingPrincipal × (rate / 100) × (daysElapsed / 365)
+// This is an approximation (it doesn't account for the principal
+// shrinking over time as repayments come in, or compounding) but matches
+// how interest is usually talked about for informal udhaar — "12% a
+// year on what I still owe" — without needing a full amortization
+// schedule.
+
+const MS_PER_DAY_LOAN = 1000 * 60 * 60 * 24;
+
+/** Days between a "YYYY-MM-DD" date and today (never negative) */
+function daysSinceLoan(dateTaken: string): number {
+  const taken = new Date(dateTaken);
+  const today = new Date();
+  const days = Math.floor((today.getTime() - taken.getTime()) / MS_PER_DAY_LOAN);
+  return Math.max(days, 0);
+}
+
+/**
+ * Total interest accrued on a loan so far, based on its current
+ * outstanding principal, interest rate, and time since it was taken.
+ * Returns 0 for loans with no interestRate set.
+ */
+export function calculateAccruedInterest(
+  loan: Pick<Loan, "amount" | "amountRepaid" | "dateTaken" | "interestRate">
+): number {
+  if (!loan.interestRate || loan.interestRate <= 0) return 0;
+  const outstandingPrincipal = amountDueForLoan(loan);
+  if (outstandingPrincipal <= 0) return 0;
+  const days = daysSinceLoan(loan.dateTaken);
+  return outstandingPrincipal * (loan.interestRate / 100) * (days / 365);
+}
+
+/** Sum of every interest payment logged against a loan */
+export function totalInterestPaid(loan: Pick<Loan, "interestPayments">): number {
+  return (loan.interestPayments ?? []).reduce((sum, p) => sum + p.amount, 0);
+}
+
+/** Interest accrued but not yet paid (never negative) */
+export function interestDueForLoan(
+  loan: Pick<Loan, "amount" | "amountRepaid" | "dateTaken" | "interestRate" | "interestPayments">
+): number {
+  return Math.max(calculateAccruedInterest(loan) - totalInterestPaid(loan), 0);
+}
+
 /** Roll loans up into Paid / Partial / Due buckets — powers the Loans page stat cards */
 export function buildLoanStatusSummary(loans: Loan[]): LoanStatusSummary[] {
   const buckets: Record<PaymentStatus, { total: number; count: number }> = {

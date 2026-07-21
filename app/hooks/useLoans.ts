@@ -150,11 +150,43 @@ export function useLoans() {
         amountRepaid: newAmountRepaid,
         dateTaken: target.dateTaken,
         dueDate: target.dueDate,
+        interestRate: target.interestRate,
         note: target.note,
         billImage: target.billImage,
       });
     },
     [loans, updateLoan]
+  );
+
+  /**
+   * Quick "Record Interest Payment" action — logs one interest payment
+   * against a loan via its own endpoint (so we don't have to resend the
+   * whole loan just to append one entry). No show() call here either,
+   * for the same reason as recordRepayment — avoid double-toasting.
+   */
+  const recordInterestPayment = useCallback(
+    async (id: string, date: string, amount: number): Promise<void> => {
+      try {
+        const res = await fetch(`/api/loans/${id}/interest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, amount }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          show("error", body.error ?? "Could not record interest payment");
+          throw new Error(body.error ?? "Could not record interest payment.");
+        }
+        const updated: Loan = await res.json();
+        setLoans((prev) => prev.map((l) => (l.id === id ? updated : l)));
+        setError(null);
+        show("success", "Interest payment recorded");
+      } catch (err) {
+        console.error(err);
+        setError(err instanceof Error ? err.message : "Could not record interest payment.");
+      }
+    },
+    [show]
   );
 
   // ── Filtering ─────────────────────────────
@@ -200,6 +232,7 @@ export function useLoans() {
     updateLoan,
     deleteLoan,
     recordRepayment,
+    recordInterestPayment,
 
     filters,
     setFilter,
