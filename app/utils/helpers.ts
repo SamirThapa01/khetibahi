@@ -7,12 +7,14 @@
 import {
   Expense,
   Income,
+  Loan,
   CategorySummary,
   MonthlySummary,
   CropProfitLoss,
   PaymentStatus,
   PaymentStatusSummary,
   BuyerDue,
+  LoanStatusSummary,
 } from "@/app/types";
 import { CATEGORIES, CROPS } from "./constants";
 import { format, parseISO, startOfMonth } from "date-fns";
@@ -109,6 +111,57 @@ export function grandIncomeTotal(income: Income[]): number {
 /** Total still owed by buyers across all sales ("amount due") */
 export function totalAmountDue(income: Income[]): number {
   return income.reduce((acc, i) => acc + (i.ratePerKg * i.quantityKg - i.amountPaid), 0);
+}
+
+// ── Loan (udhaar) helpers ─────────────────────
+// Same shape as the Income payment-status helpers above, just flipped:
+// a Loan's `amountRepaid` grows toward `amount` instead of an Income's
+// `amountPaid` growing toward a sale total.
+
+/** Total credit taken across an array of loans, regardless of repaid/due */
+export function grandLoanTotal(loans: Loan[]): number {
+  return loans.reduce((acc, l) => acc + l.amount, 0);
+}
+
+/** Total still owed to lenders across all loans ("udhaar due") */
+export function totalLoanDue(loans: Loan[]): number {
+  return loans.reduce((acc, l) => acc + (l.amount - l.amountRepaid), 0);
+}
+
+/**
+ * Derive a loan's repayment status straight from its numbers.
+ * Never stored — always computed — so it can never go stale.
+ */
+export function getLoanStatus(loan: Pick<Loan, "amount" | "amountRepaid">): PaymentStatus {
+  if (loan.amountRepaid <= 0) return "Due";
+  if (loan.amountRepaid >= loan.amount) return "Paid";
+  return "Partial";
+}
+
+/** How much of a loan is still outstanding (never negative) */
+export function amountDueForLoan(loan: Pick<Loan, "amount" | "amountRepaid">): number {
+  return Math.max(loan.amount - loan.amountRepaid, 0);
+}
+
+/** Roll loans up into Paid / Partial / Due buckets — powers the Loans page stat cards */
+export function buildLoanStatusSummary(loans: Loan[]): LoanStatusSummary[] {
+  const buckets: Record<PaymentStatus, { total: number; count: number }> = {
+    Paid: { total: 0, count: 0 },
+    Partial: { total: 0, count: 0 },
+    Due: { total: 0, count: 0 },
+  };
+
+  for (const loan of loans) {
+    const status = getLoanStatus(loan);
+    buckets[status].total += loan.amount;
+    buckets[status].count += 1;
+  }
+
+  return (["Paid", "Partial", "Due"] as PaymentStatus[]).map((status) => ({
+    status,
+    total: buckets[status].total,
+    count: buckets[status].count,
+  }));
 }
 
 /**

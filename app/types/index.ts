@@ -109,3 +109,41 @@ export interface PaymentStatusSummary {
   count: number;
 }
 
+/**
+ * Where a loan/credit (udhaar) came from. "Udhaar" — buying pesticide or
+ * seed on credit from the local agrovet, or borrowing from a cooperative
+ * or a relative — is one of the most common ways Nepali smallholder
+ * farmers finance a season, so it gets its own first-class record rather
+ * than being force-fit into Expense or Income.
+ */
+export type LoanSource = "Agrovet" | "Cooperative" | "Bank" | "Relative/Neighbor" | "Other";
+
+/**
+ * A single credit/loan record — money the farmer OWES, not earns.
+ * Mirrors Income's amountPaid/total shape, just flipped: amountRepaid
+ * grows toward `amount` instead of amountPaid growing toward a sale total.
+ */
+export interface Loan {
+  id: string;
+  lenderName: string;    // e.g. "Ram Krishi Pasal", "Sunita didi"
+  source: LoanSource;
+  crop?: string;          // optional — what the credit was taken for
+  amount: number;          // total credit/loan amount taken, in NPR
+  amountRepaid: number;    // how much has been paid back so far
+  dateTaken: string;       // "YYYY-MM-DD"
+  dueDate?: string;        // "YYYY-MM-DD" — optional
+  note: string;
+  billImage?: string;      // optional receipt/chit photo, stored as a base64 data URL
+  createdAt: string;
+}
+
+/** What the add/edit loan form holds before it becomes a Loan record */
+export type LoanFormData = Omit<Loan, "id" | "createdAt">;
+
+/** Rolled-up totals per repayment status, mirrors PaymentStatusSummary */
+export interface LoanStatusSummary {
+  status: PaymentStatus;
+  total: number;   // sum of loan amounts in this status
+  count: number;
+}
+

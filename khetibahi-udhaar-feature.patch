@@ -1,0 +1,1695 @@
+diff --git a/app/api/loans/[id]/route.ts b/app/api/loans/[id]/route.ts
+new file mode 100644
+index 0000000..a4d3815
+--- /dev/null
++++ b/app/api/loans/[id]/route.ts
+@@ -0,0 +1,98 @@
++// ─────────────────────────────────────────────
++//  /api/loans/[id]
++//  PUT    → update one loan (must belong to the logged-in user)
++//  DELETE → delete one loan (must belong to the logged-in user)
++// ─────────────────────────────────────────────
++
++import { NextRequest, NextResponse } from "next/server";
++import { dbConnect } from "@/lib/mongodb";
++import { Loan, LOAN_SOURCES } from "@/models/Loan";
++import { getCurrentUser } from "@/lib/session";
++
++export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  try {
++    const { id } = await params;
++    const body = await req.json();
++    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
++
++    if (source !== undefined && !LOAN_SOURCES.includes(source)) {
++      return NextResponse.json({ error: "Invalid source." }, { status: 400 });
++    }
++    if (
++      typeof amount === "number" &&
++      typeof amountRepaid === "number" &&
++      (amountRepaid < 0 || amountRepaid > amount)
++    ) {
++      return NextResponse.json(
++        { error: "Amount repaid can't be negative or exceed the loan amount." },
++        { status: 400 }
++      );
++    }
++
++    await dbConnect();
++
++    // Same ownership-scoped query pattern as every other model in this
++    // app: one query that's simultaneously "find this record" AND "only
++    // if it's yours." No match → 404, not 403, so a farmer probing other
++    // people's loan IDs can't even tell whether the ID exists.
++    const updated = await Loan.findOneAndUpdate(
++      { _id: id, userId: user.userId },
++      {
++        lenderName: typeof lenderName === "string" ? lenderName.trim() : lenderName,
++        source,
++        crop: crop || undefined,
++        amount,
++        amountRepaid,
++        dateTaken,
++        dueDate: dueDate || undefined,
++        note,
++        billImage: billImage ?? "",
++      },
++      { new: true, runValidators: true }
++    );
++
++    if (!updated) {
++      return NextResponse.json({ error: "Loan not found." }, { status: 404 });
++    }
++
++    return NextResponse.json({
++      id: updated._id.toString(),
++      lenderName: updated.lenderName,
++      source: updated.source,
++      crop: updated.crop || undefined,
++      amount: updated.amount,
++      amountRepaid: updated.amountRepaid,
++      dateTaken: updated.dateTaken,
++      dueDate: updated.dueDate || undefined,
++      note: updated.note,
++      billImage: updated.billImage || undefined,
++      createdAt: updated.createdAt.toISOString(),
++    });
++  } catch (err) {
++    console.error("update loan error:", err);
++    return NextResponse.json({ error: "Could not update loan." }, { status: 500 });
++  }
++}
++
++export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  try {
++    const { id } = await params;
++    await dbConnect();
++
++    const deleted = await Loan.findOneAndDelete({ _id: id, userId: user.userId });
++    if (!deleted) {
++      return NextResponse.json({ error: "Loan not found." }, { status: 404 });
++    }
++
++    return NextResponse.json({ ok: true });
++  } catch (err) {
++    console.error("delete loan error:", err);
++    return NextResponse.json({ error: "Could not delete loan." }, { status: 500 });
++  }
++}
+diff --git a/app/api/loans/route.ts b/app/api/loans/route.ts
+new file mode 100644
+index 0000000..07d68b3
+--- /dev/null
++++ b/app/api/loans/route.ts
+@@ -0,0 +1,94 @@
++// ─────────────────────────────────────────────
++//  /api/loans
++//  GET  → list the logged-in farmer's loans/udhaar
++//  POST → create a new loan for the logged-in farmer
++// ─────────────────────────────────────────────
++
++import { NextRequest, NextResponse } from "next/server";
++import { dbConnect } from "@/lib/mongodb";
++import { Loan, type ILoan, LOAN_SOURCES } from "@/models/Loan";
++import { getCurrentUser } from "@/lib/session";
++import { HydratedDocument } from "mongoose";
++
++/** Shape the frontend's `Loan` type expects: `id` not `_id` */
++function serialize(doc: HydratedDocument<ILoan>) {
++  return {
++    id: doc._id.toString(),
++    lenderName: doc.lenderName,
++    source: doc.source,
++    crop: doc.crop || undefined,
++    amount: doc.amount,
++    amountRepaid: doc.amountRepaid,
++    dateTaken: doc.dateTaken,
++    dueDate: doc.dueDate || undefined,
++    note: doc.note,
++    billImage: doc.billImage || undefined,
++    createdAt: doc.createdAt.toISOString(),
++  };
++}
++
++export async function GET() {
++  // NOTE: proxy.ts should also gate this path (see matcher config) — but
++  // we check again here regardless, same "never trust a single layer of
++  // defense" rule every other route in this app follows.
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  await dbConnect();
++  const loans = await Loan.find({ userId: user.userId }).sort({ dateTaken: -1, createdAt: -1 });
++  return NextResponse.json(loans.map(serialize));
++}
++
++export async function POST(req: NextRequest) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  try {
++    const body = await req.json();
++    const { lenderName, source, crop, amount, amountRepaid, dateTaken, dueDate, note, billImage } = body;
++
++    if (!lenderName || typeof lenderName !== "string" || !lenderName.trim()) {
++      return NextResponse.json({ error: "Lender name is required." }, { status: 400 });
++    }
++    if (!dateTaken || typeof dateTaken !== "string") {
++      return NextResponse.json({ error: "Date is required." }, { status: 400 });
++    }
++    if (typeof amount !== "number" || amount <= 0) {
++      return NextResponse.json({ error: "Amount must be a positive number." }, { status: 400 });
++    }
++    if (
++      amountRepaid !== undefined &&
++      (typeof amountRepaid !== "number" || amountRepaid < 0 || amountRepaid > amount)
++    ) {
++      return NextResponse.json(
++        { error: "Amount repaid can't be negative or exceed the loan amount." },
++        { status: 400 }
++      );
++    }
++    if (source !== undefined && !LOAN_SOURCES.includes(source)) {
++      return NextResponse.json({ error: "Invalid source." }, { status: 400 });
++    }
++
++    await dbConnect();
++    // userId comes from the verified JWT, never from the request body —
++    // otherwise anyone could pass someone else's userId and write into
++    // their data.
++    const created = await Loan.create({
++      userId: user.userId,
++      lenderName: lenderName.trim(),
++      source: source ?? "Other",
++      crop: crop || undefined,
++      amount,
++      amountRepaid: amountRepaid ?? 0,
++      dateTaken,
++      dueDate: dueDate || undefined,
++      note: note ?? "",
++      billImage: billImage ?? "",
++    });
++
++    return NextResponse.json(serialize(created), { status: 201 });
++  } catch (err) {
++    console.error("create loan error:", err);
++    return NextResponse.json({ error: "Could not save loan." }, { status: 500 });
++  }
++}
+diff --git a/app/components/LoanFilterBar.tsx b/app/components/LoanFilterBar.tsx
+new file mode 100644
+index 0000000..3232a7a
+--- /dev/null
++++ b/app/components/LoanFilterBar.tsx
+@@ -0,0 +1,96 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – LoanFilterBar
++//  Search + source/status/month filters for the udhaar list.
++//  Mirrors IncomeFilterBar.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { Search, X } from "lucide-react";
++import { LoanFilters } from "@/app/hooks/useLoans";
++import { LOAN_SOURCES } from "@/app/utils/constants";
++import { format, subMonths } from "date-fns";
++
++interface LoanFilterBarProps {
++  filters: LoanFilters;
++  onFilter: <K extends keyof LoanFilters>(key: K, value: LoanFilters[K]) => void;
++  onReset: () => void;
++}
++
++function monthOptions() {
++  const months: { value: string; label: string }[] = [];
++  for (let i = 0; i < 12; i++) {
++    const d = subMonths(new Date(), i);
++    months.push({ value: format(d, "yyyy-MM"), label: format(d, "MMMM yyyy") });
++  }
++  return months;
++}
++
++export default function LoanFilterBar({ filters, onFilter, onReset }: LoanFilterBarProps) {
++  const hasActiveFilters =
++    filters.source !== "All" || filters.month !== "" || filters.search !== "" || filters.status !== "All";
++
++  return (
++    <div className="bg-surface rounded-2xl border border-line p-4 space-y-3 shadow-soft">
++      <div className="relative">
++        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint" />
++        <input
++          type="text"
++          placeholder="Search by lender or note…"
++          value={filters.search}
++          onChange={(e) => onFilter("search", e.target.value)}
++          className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-surface text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++        />
++      </div>
++
++      <div className="flex flex-wrap gap-2">
++        <select
++          value={filters.source}
++          onChange={(e) => onFilter("source", e.target.value as LoanFilters["source"])}
++          className="flex-1 min-w-[150px] px-3 py-1.5 text-sm rounded-xl border border-line bg-surface text-ink-muted focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++        >
++          <option value="All">All Sources</option>
++          {LOAN_SOURCES.map((s) => (
++            <option key={s.value} value={s.value}>
++              {s.emoji} {s.label}
++            </option>
++          ))}
++        </select>
++
++        <select
++          value={filters.status}
++          onChange={(e) => onFilter("status", e.target.value as LoanFilters["status"])}
++          className="flex-1 min-w-[130px] px-3 py-1.5 text-sm rounded-xl border border-line bg-surface text-ink-muted focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++        >
++          <option value="All">All Repayments</option>
++          <option value="Paid">✅ Repaid</option>
++          <option value="Partial">🟠 Partial</option>
++          <option value="Due">⏳ Due</option>
++        </select>
++
++        <select
++          value={filters.month}
++          onChange={(e) => onFilter("month", e.target.value)}
++          className="flex-1 min-w-[140px] px-3 py-1.5 text-sm rounded-xl border border-line bg-surface text-ink-muted focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++        >
++          <option value="">All Time</option>
++          {monthOptions().map((m) => (
++            <option key={m.value} value={m.value}>
++              {m.label}
++            </option>
++          ))}
++        </select>
++
++        {hasActiveFilters && (
++          <button
++            onClick={onReset}
++            className="flex items-center gap-1 px-3 py-1.5 text-sm text-negative rounded-xl border border-negative/25 hover:bg-negative-soft transition-colors"
++          >
++            <X className="w-3.5 h-3.5" />
++            Clear
++          </button>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/app/components/LoanForm.tsx b/app/components/LoanForm.tsx
+new file mode 100644
+index 0000000..ab9420f
+--- /dev/null
++++ b/app/components/LoanForm.tsx
+@@ -0,0 +1,327 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – LoanForm
++//  Logs a credit/loan (udhaar): who it's from,
++//  how much, and how much has already been repaid.
++//  Same "status pill drives the amount" pattern as
++//  IncomeForm, just flipped: amountRepaid instead
++//  of amountPaid.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect } from "react";
++import { X, Save, CheckCircle2, Clock3, CircleDollarSign } from "lucide-react";
++import { LoanFormData, LoanSource, PaymentStatus } from "@/app/types";
++import { LOAN_SOURCES, CROPS } from "@/app/utils/constants";
++import { todayISO, formatNPR, getLoanStatus } from "@/app/utils/helpers";
++import ImageUploadField from "@/app/components/ImageUploadField";
++
++interface LoanFormProps {
++  onSubmit: (data: LoanFormData) => void;
++  onCancel: () => void;
++  initialData?: LoanFormData;
++}
++
++const EMPTY: LoanFormData = {
++  lenderName: "",
++  source: "Agrovet",
++  crop: undefined,
++  amount: 0,
++  amountRepaid: 0,
++  dateTaken: todayISO(),
++  dueDate: undefined,
++  note: "",
++};
++
++export default function LoanForm({ onSubmit, onCancel, initialData }: LoanFormProps) {
++  const [form, setForm] = useState<LoanFormData>(initialData ?? EMPTY);
++  const [errors, setErrors] = useState<Partial<Record<keyof LoanFormData, string>>>({});
++
++  // Which repayment-status pill is active. Drives amountRepaid: "Paid"
++  // always tracks the full amount, "Due" is always 0, "Partial" is
++  // whatever the farmer types in. New udhaar defaults to "Due" since
++  // that's the common case — you log the credit the day you take it,
++  // before you've repaid anything.
++  const [status, setStatus] = useState<PaymentStatus>(() =>
++    initialData ? getLoanStatus(initialData) : "Due"
++  );
++
++  useEffect(() => {
++    if (initialData) {
++      setForm(initialData);
++      setStatus(getLoanStatus(initialData));
++    }
++  }, [initialData]);
++
++  const due = Math.max(form.amount - form.amountRepaid, 0);
++
++  function validate(): boolean {
++    const e: typeof errors = {};
++    if (!form.lenderName.trim()) e.lenderName = "Lender name is required";
++    if (!form.dateTaken) e.dateTaken = "Date is required";
++    if (form.amount <= 0) e.amount = "Must be greater than 0";
++    if (form.amountRepaid < 0) e.amountRepaid = "Cannot be negative";
++    if (form.amountRepaid > form.amount) e.amountRepaid = "Cannot exceed the loan amount";
++    setErrors(e);
++    return Object.keys(e).length === 0;
++  }
++
++  function handleSubmit(e: React.FormEvent) {
++    e.preventDefault();
++    if (validate()) onSubmit(form);
++  }
++
++  function set<K extends keyof LoanFormData>(key: K, value: LoanFormData[K]) {
++    setForm((prev) => {
++      const next = { ...prev, [key]: value };
++      // Keep amountRepaid consistent with the active status pill whenever
++      // the loan amount changes.
++      if (key === "amount") {
++        if (status === "Paid") next.amountRepaid = next.amount;
++        else if (status === "Due") next.amountRepaid = 0;
++        else next.amountRepaid = Math.min(next.amountRepaid, next.amount); // Partial — never exceed a shrinking total
++      }
++      return next;
++    });
++    setErrors((prev) => ({ ...prev, [key]: undefined }));
++  }
++
++  function handleStatusPick(next: PaymentStatus) {
++    setStatus(next);
++    setForm((prev) => {
++      if (next === "Paid") return { ...prev, amountRepaid: prev.amount };
++      if (next === "Due") return { ...prev, amountRepaid: 0 };
++      // Partial: keep the existing figure if it's already sensible,
++      // otherwise default to half the amount as a starting point.
++      const sensible = prev.amountRepaid > 0 && prev.amountRepaid < prev.amount;
++      return { ...prev, amountRepaid: sensible ? prev.amountRepaid : Math.round(prev.amount / 2) };
++    });
++    setErrors((prev) => ({ ...prev, amountRepaid: undefined }));
++  }
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
++      <div className="bg-surface rounded-3xl shadow-lift w-full max-w-md max-h-[90vh] overflow-y-auto">
++        {/* Header */}
++        <div className="bahi-ledger flex items-center justify-between px-6 pt-5 pb-4 border-b border-line rounded-t-3xl">
++          <h2 className="text-lg font-display font-bold text-ink">
++            {initialData ? "Edit Udhaar" : "Log Udhaar (Credit)"}
++          </h2>
++          <button onClick={onCancel} className="p-1.5 rounded-full text-ink-faint hover:bg-surface-2">
++            <X className="w-4 h-4" />
++          </button>
++        </div>
++
++        <form onSubmit={handleSubmit} className="p-6 space-y-4">
++          {/* Lender name */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Lender name</label>
++            <input
++              type="text"
++              value={form.lenderName}
++              onChange={(e) => set("lenderName", e.target.value)}
++              placeholder="e.g. Ram Krishi Pasal, Sunita didi"
++              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++            />
++            {errors.lenderName && <p className="text-negative text-xs mt-1">{errors.lenderName}</p>}
++          </div>
++
++          {/* Source */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Source</label>
++            <div className="grid grid-cols-2 gap-2">
++              {LOAN_SOURCES.map((s) => (
++                <button
++                  key={s.value}
++                  type="button"
++                  onClick={() => set("source", s.value as LoanSource)}
++                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm border transition-all ${
++                    form.source === s.value
++                      ? "bg-brand-soft text-brand border-brand/30 font-semibold"
++                      : "border-line text-ink-muted hover:border-ink-faint"
++                  }`}
++                >
++                  <span>{s.emoji}</span>
++                  {s.label}
++                </button>
++              ))}
++            </div>
++          </div>
++
++          {/* Crop (optional) */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">
++              Crop / purpose <span className="text-ink-faint">(optional)</span>
++            </label>
++            <select
++              value={form.crop ?? ""}
++              onChange={(e) => set("crop", e.target.value || undefined)}
++              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++            >
++              <option value="">Not tied to a specific crop</option>
++              {CROPS.filter((c) => c.value !== "All Crops").map((c) => (
++                <option key={c.value} value={c.value}>
++                  {c.emoji} {c.label}
++                </option>
++              ))}
++            </select>
++          </div>
++
++          {/* Date taken + due date side by side */}
++          <div className="grid grid-cols-2 gap-3">
++            <div>
++              <label className="block text-sm font-medium text-ink-muted mb-1">Date taken</label>
++              <input
++                type="date"
++                value={form.dateTaken}
++                max={todayISO()}
++                onChange={(e) => set("dateTaken", e.target.value)}
++                className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++              {errors.dateTaken && <p className="text-negative text-xs mt-1">{errors.dateTaken}</p>}
++            </div>
++            <div>
++              <label className="block text-sm font-medium text-ink-muted mb-1">
++                Due date <span className="text-ink-faint">(optional)</span>
++              </label>
++              <input
++                type="date"
++                value={form.dueDate ?? ""}
++                onChange={(e) => set("dueDate", e.target.value || undefined)}
++                className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++            </div>
++          </div>
++
++          {/* Amount */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Amount taken (NPR)</label>
++            <div className="relative">
++              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
++              <input
++                type="number"
++                min={0}
++                value={form.amount || ""}
++                onChange={(e) => set("amount", Number(e.target.value))}
++                placeholder="0"
++                className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++            </div>
++            {errors.amount && <p className="text-negative text-xs mt-1">{errors.amount}</p>}
++          </div>
++
++          {/* Repayment status */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1.5">Repayment status</label>
++            <div className="grid grid-cols-3 gap-2">
++              <button
++                type="button"
++                onClick={() => handleStatusPick("Due")}
++                className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
++                  status === "Due"
++                    ? "bg-negative-soft text-negative border-negative/30"
++                    : "border-line text-ink-muted hover:border-ink-faint"
++                }`}
++              >
++                <Clock3 className="w-4 h-4" />
++                Not Repaid
++              </button>
++              <button
++                type="button"
++                onClick={() => handleStatusPick("Partial")}
++                className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
++                  status === "Partial"
++                    ? "bg-accent-soft text-accent border-accent/30"
++                    : "border-line text-ink-muted hover:border-ink-faint"
++                }`}
++              >
++                <CircleDollarSign className="w-4 h-4" />
++                Partial
++              </button>
++              <button
++                type="button"
++                onClick={() => handleStatusPick("Paid")}
++                className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
++                  status === "Paid"
++                    ? "bg-brand-soft text-brand border-brand/30"
++                    : "border-line text-ink-muted hover:border-ink-faint"
++                }`}
++              >
++                <CheckCircle2 className="w-4 h-4" />
++                Fully Repaid
++              </button>
++            </div>
++
++            {/* Only ask for the exact figure when it's a partial repayment —
++                Paid/Due already imply the number (amount or zero). */}
++            {status === "Partial" && (
++              <div className="mt-3">
++                <div className="flex items-center justify-between mb-1">
++                  <label className="block text-sm font-medium text-ink-muted">Amount repaid so far</label>
++                  {due > 0 && (
++                    <span className="text-xs text-accent font-medium tabular-nums">
++                      Still owe: {formatNPR(due)}
++                    </span>
++                  )}
++                </div>
++                <div className="relative">
++                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
++                  <input
++                    type="number"
++                    min={0}
++                    max={form.amount}
++                    value={form.amountRepaid || ""}
++                    onChange={(e) => set("amountRepaid", Number(e.target.value))}
++                    placeholder="0"
++                    autoFocus
++                    className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++                  />
++                </div>
++                {errors.amountRepaid && <p className="text-negative text-xs mt-1">{errors.amountRepaid}</p>}
++              </div>
++            )}
++          </div>
++
++          {/* Note */}
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">
++              Note <span className="text-ink-faint">(optional)</span>
++            </label>
++            <textarea
++              value={form.note}
++              onChange={(e) => set("note", e.target.value)}
++              placeholder="e.g. Urea and pesticide on credit before Dashain…"
++              rows={2}
++              className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-none"
++            />
++          </div>
++
++          {/* Receipt / chit photo */}
++          <ImageUploadField
++            label="Receipt / khata chit photo"
++            value={form.billImage}
++            onChange={(dataUrl) => set("billImage", dataUrl)}
++          />
++
++          {/* Actions */}
++          <div className="flex gap-3 pt-2">
++            <button
++              type="button"
++              onClick={onCancel}
++              className="flex-1 px-4 py-2.5 rounded-xl border border-line text-ink-muted text-sm font-medium hover:bg-surface-2 transition-colors"
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
++            >
++              <Save className="w-4 h-4" />
++              {initialData ? "Save Changes" : "Log Udhaar"}
++            </button>
++          </div>
++        </form>
++      </div>
++    </div>
++  );
++}
+diff --git a/app/components/Navbar.tsx b/app/components/Navbar.tsx
+index 9e1d1af..9aaf107 100644
+--- a/app/components/Navbar.tsx
++++ b/app/components/Navbar.tsx
+@@ -10,12 +10,13 @@
+ 
+ import Link from "next/link";
+ import { usePathname } from "next/navigation";
+-import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf, PiggyBank, Repeat } from "lucide-react";
++import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf, PiggyBank, Repeat, HandCoins } from "lucide-react";
+ 
+ const NAV = [
+   { href: "/",          label: "Home",      Icon: LayoutDashboard },
+   { href: "/income",    label: "Income",    Icon: Coins           },
+   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
++  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
+   { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+ { href: "/recurring", label: "Recurring", Icon: Repeat          },
+   { href: "/crops",     label: "Crops",     Icon: Leaf            },
+diff --git a/app/components/RecordRepaymentModal.tsx b/app/components/RecordRepaymentModal.tsx
+new file mode 100644
+index 0000000..ae3c8ab
+--- /dev/null
++++ b/app/components/RecordRepaymentModal.tsx
+@@ -0,0 +1,105 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – RecordRepaymentModal
++//
++//  Same idea as RecordPaymentModal on the Income
++//  side, flipped for loans: "I just paid back some/
++//  all of what I owe this lender." Faster than
++//  reopening the full edit-loan form to bump one number.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState } from "react";
++import { X, CircleDollarSign } from "lucide-react";
++import { Loan } from "@/app/types";
++import { formatNPR, amountDueForLoan } from "@/app/utils/helpers";
++
++interface RecordRepaymentModalProps {
++  loan: Loan;
++  onConfirm: (extraRepaid: number) => void;
++  onCancel: () => void;
++}
++
++export default function RecordRepaymentModal({ loan, onConfirm, onCancel }: RecordRepaymentModalProps) {
++  const due = amountDueForLoan(loan);
++  const [amount, setAmount] = useState<number>(due);
++  const [error, setError] = useState<string | null>(null);
++
++  function handleConfirm() {
++    if (amount <= 0) {
++      setError("Enter an amount greater than zero.");
++      return;
++    }
++    if (amount > due) {
++      setError(`Cannot exceed the outstanding due of ${formatNPR(due)}.`);
++      return;
++    }
++    onConfirm(amount);
++  }
++
++  return (
++    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
++      <div className="bg-surface rounded-3xl shadow-lift w-full max-w-sm">
++        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
++          <h2 className="text-lg font-display font-bold text-ink flex items-center gap-2">
++            <CircleDollarSign className="w-5 h-5 text-brand" />
++            Record Repayment
++          </h2>
++          <button onClick={onCancel} className="p-1.5 rounded-full text-ink-faint hover:bg-surface-2">
++            <X className="w-4 h-4" />
++          </button>
++        </div>
++
++        <div className="p-6 space-y-4">
++          <p className="text-sm text-ink-muted">
++            You owe <span className="font-semibold text-ink">{loan.lenderName}</span>{" "}
++            <span className="font-semibold text-accent tabular-nums">{formatNPR(due)}</span> from the
++            udhaar taken on {loan.dateTaken}.
++          </p>
++
++          <div>
++            <label className="block text-sm font-medium text-ink-muted mb-1">Amount repaid now</label>
++            <div className="relative">
++              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
++              <input
++                type="number"
++                min={0}
++                max={due}
++                autoFocus
++                value={amount || ""}
++                onChange={(e) => {
++                  setAmount(Number(e.target.value));
++                  setError(null);
++                }}
++                className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++              />
++            </div>
++            {error && <p className="text-negative text-xs mt-1">{error}</p>}
++            <button
++              type="button"
++              onClick={() => { setAmount(due); setError(null); }}
++              className="text-xs text-brand font-medium mt-1.5 hover:underline"
++            >
++              Repaid the full {formatNPR(due)}
++            </button>
++          </div>
++
++          <div className="flex gap-3 pt-1">
++            <button
++              onClick={onCancel}
++              className="flex-1 px-4 py-2.5 rounded-xl border border-line text-ink-muted text-sm font-medium hover:bg-surface-2 transition-colors"
++            >
++              Cancel
++            </button>
++            <button
++              onClick={handleConfirm}
++              className="flex-1 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
++            >
++              Save Repayment
++            </button>
++          </div>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/app/components/Sidebar.tsx b/app/components/Sidebar.tsx
+index e305690..ec0879e 100644
+--- a/app/components/Sidebar.tsx
++++ b/app/components/Sidebar.tsx
+@@ -23,7 +23,8 @@ import {
+   Wheat,
+   Leaf,
+   PiggyBank,
+-  Repeat
++  Repeat,
++  HandCoins
+ } from "lucide-react";
+ import { useAuth } from "@/app/context/AuthContext";
+ 
+@@ -31,6 +32,7 @@ const NAV = [
+   { href: "/",          label: "Dashboard", Icon: LayoutDashboard },
+   { href: "/income",    label: "Income",    Icon: Coins           },
+   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
++  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
+   { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+  { href: "/recurring", label: "Recurring", Icon: Repeat          },
+   { href: "/crops",     label: "Crops",     Icon: Leaf            },
+diff --git a/app/hooks/useLoans.ts b/app/hooks/useLoans.ts
+new file mode 100644
+index 0000000..6aed65b
+--- /dev/null
++++ b/app/hooks/useLoans.ts
+@@ -0,0 +1,208 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – useLoans Hook
++//
++//  Same pattern as useIncome: loads from the API
++//  (→ MongoDB) on mount, sends every add/edit/delete
++//  straight to the server, and exposes filtering +
++//  computed totals for udhaar (credit) tracking.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect, useMemo, useCallback } from "react";
++import { Loan, LoanFormData, LoanSource, PaymentStatus } from "@/app/types";
++import { grandLoanTotal, totalLoanDue, getLoanStatus, buildLoanStatusSummary } from "@/app/utils/helpers";
++import { useInformation } from "../components/Information";
++
++export interface LoanFilters {
++  source: LoanSource | "All";
++  month: string; // "YYYY-MM" or "" for all
++  search: string; // matches lender name or note
++  status: PaymentStatus | "All";
++}
++
++const DEFAULT_FILTERS: LoanFilters = {
++  source: "All",
++  month: "",
++  search: "",
++  status: "All",
++};
++
++export function useLoans() {
++  const [loans, setLoans] = useState<Loan[]>([]);
++  const [filters, setFilters] = useState<LoanFilters>(DEFAULT_FILTERS);
++  const [isLoaded, setIsLoaded] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const { show } = useInformation();
++
++  // ── Load from the database once on mount ──
++  useEffect(() => {
++    let cancelled = false;
++    (async () => {
++      try {
++        const res = await fetch("/api/loans");
++        if (!res.ok) throw new Error("Could not load loans.");
++        const data: Loan[] = await res.json();
++        if (!cancelled) setLoans(data);
++      } catch (err) {
++        console.error(err);
++        if (!cancelled) setError("Could not load loans. Please refresh.");
++      } finally {
++        if (!cancelled) setIsLoaded(true);
++      }
++    })();
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  // ── CRUD actions ───────────────────────────
++
++  const addLoan = useCallback(
++    async (data: LoanFormData): Promise<void> => {
++      try {
++        const res = await fetch("/api/loans", {
++          method: "POST",
++          headers: { "Content-Type": "application/json" },
++          body: JSON.stringify(data),
++        });
++        if (!res.ok) {
++          const body = await res.json().catch(() => ({}));
++          show("error", body.error ?? "Could not save udhaar");
++          throw new Error(body.error ?? "Could not save udhaar.");
++        }
++        const saved: Loan = await res.json();
++        setLoans((prev) => [saved, ...prev]);
++        setError(null);
++        show("success", "Udhaar added");
++      } catch (err) {
++        console.error(err);
++        setError(err instanceof Error ? err.message : "Could not save udhaar.");
++      }
++    },
++    [show]
++  );
++
++  const updateLoan = useCallback(
++    async (id: string, data: LoanFormData): Promise<void> => {
++      try {
++        const res = await fetch(`/api/loans/${id}`, {
++          method: "PUT",
++          headers: { "Content-Type": "application/json" },
++          body: JSON.stringify(data),
++        });
++        if (!res.ok) {
++          const body = await res.json().catch(() => ({}));
++          show("error", body.error ?? "Could not update udhaar");
++          throw new Error(body.error ?? "Could not update udhaar.");
++        }
++        const updated: Loan = await res.json();
++        setLoans((prev) => prev.map((l) => (l.id === id ? updated : l)));
++        setError(null);
++        show("success", "Udhaar updated");
++      } catch (err) {
++        console.error(err);
++        setError(err instanceof Error ? err.message : "Could not update udhaar.");
++      }
++    },
++    [show]
++  );
++
++  const deleteLoan = useCallback(
++    async (id: string): Promise<void> => {
++      try {
++        const res = await fetch(`/api/loans/${id}`, { method: "DELETE" });
++        if (!res.ok) {
++          const body = await res.json().catch(() => ({}));
++          show("error", body.error ?? "Could not delete udhaar");
++          throw new Error(body.error ?? "Could not delete udhaar.");
++        }
++        setLoans((prev) => prev.filter((l) => l.id !== id));
++        setError(null);
++        show("success", "Udhaar deleted");
++      } catch (err) {
++        console.error(err);
++        setError(err instanceof Error ? err.message : "Could not delete udhaar.");
++      }
++    },
++    [show]
++  );
++
++  /**
++   * Quick "Record Repayment" action — adds `extraRepaid` on top of
++   * whatever's already been paid back, capped at the loan's total,
++   * without requiring a full edit. Mirrors useIncome's recordPayment.
++   *
++   * No show() call here on purpose — this delegates to updateLoan, which
++   * already toasts on success/failure. Toasting here too would fire two
++   * messages for one click.
++   */
++  const recordRepayment = useCallback(
++    async (id: string, extraRepaid: number): Promise<void> => {
++      const target = loans.find((l) => l.id === id);
++      if (!target) return;
++      const newAmountRepaid = Math.min(target.amount, target.amountRepaid + extraRepaid);
++      await updateLoan(id, {
++        lenderName: target.lenderName,
++        source: target.source,
++        crop: target.crop,
++        amount: target.amount,
++        amountRepaid: newAmountRepaid,
++        dateTaken: target.dateTaken,
++        dueDate: target.dueDate,
++        note: target.note,
++        billImage: target.billImage,
++      });
++    },
++    [loans, updateLoan]
++  );
++
++  // ── Filtering ─────────────────────────────
++
++  const filteredLoans = useMemo<Loan[]>(() => {
++    return loans.filter((l) => {
++      if (filters.source !== "All" && l.source !== filters.source) return false;
++      if (filters.month && !l.dateTaken.startsWith(filters.month)) return false;
++      if (filters.status !== "All" && getLoanStatus(l) !== filters.status) return false;
++      if (
++        filters.search &&
++        !l.lenderName.toLowerCase().includes(filters.search.toLowerCase()) &&
++        !l.note.toLowerCase().includes(filters.search.toLowerCase())
++      )
++        return false;
++      return true;
++    });
++  }, [loans, filters]);
++
++  // ── Derived totals (always from full list) ─
++  const totalLoans = useMemo(() => grandLoanTotal(loans), [loans]);
++  const totalDue = useMemo(() => totalLoanDue(loans), [loans]);
++  const statusSummary = useMemo(() => buildLoanStatusSummary(loans), [loans]);
++
++  function setFilter<K extends keyof LoanFilters>(key: K, value: LoanFilters[K]) {
++    setFilters((prev) => ({ ...prev, [key]: value }));
++  }
++
++  function resetFilters() {
++    setFilters(DEFAULT_FILTERS);
++  }
++
++  return {
++    loans,
++    filteredLoans,
++    totalLoans,
++    totalDue,
++    statusSummary,
++    isLoaded,
++    error,
++
++    addLoan,
++    updateLoan,
++    deleteLoan,
++    recordRepayment,
++
++    filters,
++    setFilter,
++    resetFilters,
++  };
++}
+diff --git a/app/loans/page.tsx b/app/loans/page.tsx
+new file mode 100644
+index 0000000..0736bc6
+--- /dev/null
++++ b/app/loans/page.tsx
+@@ -0,0 +1,384 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Loans (Udhaar) Page
++//  Same visual language as the Income page:
++//  stat cards at top, filter bar, then a clean
++//  list of records with edit/delete/repay actions.
++//
++//  "Udhaar" — buying pesticide or seed on credit
++//  from the local agrovet, or borrowing from a
++//  cooperative/relative — is one of the most common
++//  ways Nepali smallholder farmers finance a season.
++//  This page tracks that debt the same way Income
++//  tracks money owed TO the farmer, just flipped.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect } from "react";
++import {
++  Plus,
++  Pencil,
++  Trash2,
++  CheckCircle2,
++  CircleDollarSign,
++  Clock3,
++  HandCoins,
++} from "lucide-react";
++import { useLoans } from "@/app/hooks/useLoans";
++import LoanForm from "@/app/components/LoanForm";
++import LoanFilterBar from "@/app/components/LoanFilterBar";
++import RecordRepaymentModal from "@/app/components/RecordRepaymentModal";
++import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
++import ImageLightbox from "@/app/components/ImageLightbox";
++import { Loan, LoanFormData } from "@/app/types";
++import { formatNPR, getLoanStatus, amountDueForLoan, prettyDate } from "@/app/utils/helpers";
++import { LOAN_SOURCES } from "@/app/utils/constants";
++
++// Visual language for each repayment status — reused across the badge and the stat card
++const STATUS_META = {
++  Paid: { label: "Repaid", Icon: CheckCircle2, text: "text-brand", bg: "bg-brand-soft" },
++  Partial: { label: "Partial", Icon: CircleDollarSign, text: "text-accent", bg: "bg-accent-soft" },
++  Due: { label: "Due", Icon: Clock3, text: "text-negative", bg: "bg-negative-soft" },
++} as const;
++
++export default function LoansPage() {
++  const {
++    filteredLoans,
++    totalLoans,
++    totalDue,
++    statusSummary,
++    isLoaded,
++    addLoan,
++    updateLoan,
++    deleteLoan,
++    recordRepayment,
++    filters,
++    setFilter,
++    resetFilters,
++  } = useLoans();
++
++  const [showForm, setShowForm] = useState(false);
++  const [editing, setEditing] = useState<Loan | null>(null);
++  const [repaying, setRepaying] = useState<Loan | null>(null);
++  const [deleteTarget, setDeleteTarget] = useState<{ id: string; lenderName: string } | null>(null);
++  const [isDeleting, setIsDeleting] = useState(false);
++  const [showBillFor, setShowBillFor] = useState<string | null>(null);
++
++  const isAnyModalOpen = showForm || repaying !== null || deleteTarget !== null;
++
++  // 🔒 Lock background scroll while a modal is open — same pattern as Income/Expenses pages.
++  useEffect(() => {
++    if (!isAnyModalOpen) return;
++
++    const scrollY = window.scrollY;
++    document.body.style.position = "fixed";
++    document.body.style.top = `-${scrollY}px`;
++    document.body.style.left = "0";
++    document.body.style.right = "0";
++    document.body.style.overflow = "hidden";
++
++    return () => {
++      document.body.style.position = "";
++      document.body.style.top = "";
++      document.body.style.left = "";
++      document.body.style.right = "";
++      document.body.style.overflow = "";
++      window.scrollTo(0, scrollY);
++    };
++  }, [isAnyModalOpen]);
++
++  function handleSubmit(data: LoanFormData) {
++    if (editing) updateLoan(editing.id, data);
++    else addLoan(data);
++    setShowForm(false);
++    setEditing(null);
++  }
++
++  function handleEdit(loan: Loan) {
++    setEditing(loan);
++    setShowForm(true);
++  }
++
++  function handleCancel() {
++    setShowForm(false);
++    setEditing(null);
++  }
++
++  function handleDelete(id: string, lenderName: string) {
++    setDeleteTarget({ id, lenderName });
++  }
++
++  async function handleConfirmDelete() {
++    if (!deleteTarget) return;
++    setIsDeleting(true);
++    try {
++      await deleteLoan(deleteTarget.id);
++    } finally {
++      setIsDeleting(false);
++      setDeleteTarget(null);
++    }
++  }
++
++  function handleConfirmRepayment(extraRepaid: number) {
++    if (repaying) recordRepayment(repaying.id, extraRepaid);
++    setRepaying(null);
++  }
++
++  const totalRepaid = totalLoans - totalDue;
++  const pendingCount = statusSummary.filter((s) => s.status !== "Paid").reduce((sum, s) => sum + s.count, 0);
++
++  if (!isLoaded) {
++    return (
++      <div className="flex items-center justify-center py-20">
++        <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
++      </div>
++    );
++  }
++
++  return (
++    <>
++      <div
++        className={`space-y-5 ${isAnyModalOpen ? "pointer-events-none select-none" : ""}`}
++        aria-hidden={isAnyModalOpen}
++      >
++        {/* ── Header ── */}
++        <div className="flex items-start justify-between gap-3">
++          <div>
++            <h1 className="text-2xl font-display font-bold text-ink">Udhaar (Loans)</h1>
++            <p className="text-sm text-ink-muted mt-0.5">
++              Track credit from the agrovet, cooperative, bank, or a relative — and pay it back over time.
++            </p>
++          </div>
++          <button
++            onClick={() => { setEditing(null); setShowForm(true); }}
++            className="flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold px-4 py-2 rounded-xl shadow-soft transition-colors flex-shrink-0"
++          >
++            <Plus className="w-4 h-4" />
++            <span>Log Udhaar</span>
++          </button>
++        </div>
++
++        {/* ── Stat cards ── */}
++        {filteredLoans.length > 0 && (
++          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
++            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
++              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-negative-soft">
++                🤝
++              </span>
++              <div className="min-w-0">
++                <p className="text-xs font-medium text-negative mb-0.5">Total Udhaar Taken</p>
++                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
++                  {formatNPR(totalLoans)}
++                </p>
++              </div>
++            </div>
++
++            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
++              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-[#e8f5e9]">
++                ✅
++              </span>
++              <div className="min-w-0">
++                <p className="text-xs font-medium text-[#2e7d32] mb-0.5">Repaid So Far</p>
++                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
++                  {formatNPR(totalRepaid)}
++                </p>
++              </div>
++            </div>
++
++            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
++              <span className="flex items-center justify-center w-10 h-10 rounded-xl text-xl flex-shrink-0 bg-accent-soft">
++                ⏳
++              </span>
++              <div className="min-w-0">
++                <p className="text-xs font-medium text-accent mb-0.5">Still Owed</p>
++                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
++                  {formatNPR(totalDue)}
++                </p>
++              </div>
++            </div>
++
++            <div className="bg-surface rounded-2xl border border-line p-4 shadow-soft flex items-start gap-3 min-w-0">
++              <span className="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 bg-negative-soft">
++                <HandCoins className="w-5 h-5 text-negative" />
++              </span>
++              <div className="min-w-0">
++                <p className="text-xs font-medium text-negative mb-0.5">Open Udhaar</p>
++                <p className="text-base font-display font-bold text-ink tabular-nums truncate">
++                  {pendingCount}
++                </p>
++              </div>
++            </div>
++          </div>
++        )}
++
++        {/* ── Filter + list ── */}
++        <LoanFilterBar filters={filters} onFilter={setFilter} onReset={resetFilters} />
++
++        {filteredLoans.length === 0 ? (
++          <div className="bg-surface rounded-2xl border border-dashed border-line p-10 text-center">
++            <HandCoins className="w-10 h-10 text-brand mx-auto mb-3" />
++            <h2 className="font-display font-semibold text-ink mb-1">No udhaar logged yet</h2>
++            <p className="text-sm text-ink-muted mb-4">
++              Log any credit you&apos;ve taken — from the agrovet, a cooperative, or a neighbor — and track it
++              until it&apos;s fully repaid.
++            </p>
++            <button
++              onClick={() => { setEditing(null); setShowForm(true); }}
++              className="inline-flex items-center gap-2 bg-brand hover:bg-brand-dark text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
++            >
++              <Plus className="w-4 h-4" />
++              Log First Udhaar
++            </button>
++          </div>
++        ) : (
++          <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
++            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line gap-3">
++              <h2 className="font-display font-semibold text-ink text-sm flex-shrink-0">Udhaar Records</h2>
++              <span className="text-xs text-ink-muted tabular-nums text-right truncate">
++                {filteredLoans.length} record{filteredLoans.length === 1 ? "" : "s"} · {formatNPR(totalLoans)}
++              </span>
++            </div>
++
++            <div className="divide-y divide-line">
++              {filteredLoans.map((loan) => {
++                const src = LOAN_SOURCES.find((s) => s.value === loan.source);
++                const due = amountDueForLoan(loan);
++                const status = getLoanStatus(loan);
++                const meta = STATUS_META[status];
++                const StatusIcon = meta.Icon;
++
++                return (
++                  <div key={loan.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-surface-2 transition-colors">
++                    <span className="flex-shrink-0 text-lg" title={loan.source}>
++                      {src?.emoji ?? "🤝"}
++                    </span>
++
++                    {loan.billImage && (
++                      <button
++                        type="button"
++                        onClick={() => setShowBillFor(loan.id)}
++                        className="flex-shrink-0"
++                        title="View receipt photo"
++                      >
++                        {/* eslint-disable-next-line @next/next/no-img-element */}
++                        <img
++                          src={loan.billImage}
++                          alt="Receipt"
++                          className="w-9 h-9 rounded-lg object-cover border border-line"
++                        />
++                      </button>
++                    )}
++                    {showBillFor === loan.id && loan.billImage && (
++                      <ImageLightbox src={loan.billImage} onClose={() => setShowBillFor(null)} />
++                    )}
++
++                    <div className="flex-1 min-w-0">
++                      <div className="flex items-center gap-2 flex-wrap">
++                        <span className="font-medium text-ink truncate">{loan.lenderName}</span>
++                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${meta.bg} ${meta.text}`}>
++                          <StatusIcon className="w-3 h-3" />
++                          {meta.label}
++                        </span>
++                      </div>
++                      <p className="text-xs text-ink-muted truncate mt-0.5">
++                        {src?.label ?? loan.source}
++                        {loan.crop && ` · ${loan.crop}`}
++                        {loan.note && ` · ${loan.note}`}
++                      </p>
++                      <p className="text-xs text-ink-faint mt-0.5">
++                        Taken {prettyDate(loan.dateTaken)}
++                        {loan.dueDate && ` · Due ${prettyDate(loan.dueDate)}`}
++                      </p>
++                      {due > 0 && (
++                        <button
++                          onClick={() => setRepaying(loan)}
++                          className="text-[11px] font-medium text-brand hover:underline mt-1"
++                        >
++                          + Record repayment
++                        </button>
++                      )}
++                    </div>
++
++                    <div className="text-right flex-shrink-0">
++                      <p className="text-sm font-bold text-negative tabular-nums">{formatNPR(loan.amount)}</p>
++                      {due > 0 && (
++                        <p className="text-[11px] text-ink-faint tabular-nums">{formatNPR(due)} due</p>
++                      )}
++                    </div>
++
++                    <div className="flex gap-1 flex-shrink-0">
++                      <button
++                        onClick={() => handleEdit(loan)}
++                        className="p-1.5 rounded-lg text-ink-faint hover:text-brand hover:bg-brand-soft transition-colors"
++                        title="Edit"
++                      >
++                        <Pencil className="w-3.5 h-3.5" />
++                      </button>
++                      <button
++                        onClick={() => handleDelete(loan.id, loan.lenderName)}
++                        className="p-1.5 rounded-lg text-ink-faint hover:text-negative hover:bg-negative-soft transition-colors"
++                        title="Delete"
++                      >
++                        <Trash2 className="w-3.5 h-3.5" />
++                      </button>
++                    </div>
++                  </div>
++                );
++              })}
++            </div>
++          </div>
++        )}
++      </div>
++
++      {/* Modal: add/edit udhaar — sibling of the disabled div, always interactive */}
++      {showForm && (
++        <LoanForm
++          onSubmit={handleSubmit}
++          onCancel={handleCancel}
++          initialData={
++            editing
++              ? {
++                  lenderName: editing.lenderName,
++                  source: editing.source,
++                  crop: editing.crop,
++                  amount: editing.amount,
++                  amountRepaid: editing.amountRepaid,
++                  dateTaken: editing.dateTaken,
++                  dueDate: editing.dueDate,
++                  note: editing.note,
++                  billImage: editing.billImage,
++                }
++              : undefined
++          }
++        />
++      )}
++
++      {/* Modal: quick record-repayment — also a sibling */}
++      {repaying && (
++        <RecordRepaymentModal
++          loan={repaying}
++          onConfirm={handleConfirmRepayment}
++          onCancel={() => setRepaying(null)}
++        />
++      )}
++
++      {/* Modal: delete confirmation */}
++      {deleteTarget && (
++        <ConfirmDeleteModal
++          isOpen={deleteTarget !== null}
++          title="Delete udhaar record?"
++          description={
++            <>
++              This will permanently delete the udhaar from{" "}
++              <span className="font-semibold text-negative">{deleteTarget.lenderName}</span>. This action
++              cannot be undone.
++            </>
++          }
++          onConfirm={handleConfirmDelete}
++          onCancel={() => setDeleteTarget(null)}
++          isLoading={isDeleting}
++        />
++      )}
++    </>
++  );
++}
+diff --git a/app/page.tsx b/app/page.tsx
+index e0698ea..299e725 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -8,9 +8,10 @@
+ "use client";
+ 
+ import { useMemo, useState } from "react";
+-import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3, PiggyBank, Repeat } from "lucide-react";
++import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3, PiggyBank, Repeat, HandCoins } from "lucide-react";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
++import { useLoans } from "@/app/hooks/useLoans";
+ import SummaryCard from "@/app/components/SummaryCard";
+ import ExpenseForm from "@/app/components/ExpenseForm";
+ import ExpenseRow from "@/app/components/ExpenseRow";
+@@ -34,6 +35,7 @@ export default function DashboardPage() {
+   } = useExpenses();
+ 
+   const { income, totalIncome, isLoaded: incomeLoaded } = useIncome();
++  const { totalDue: udhaarDue, loans } = useLoans();
+   const { budgets } = useBudgets(expenses);
+  const { items: recurringItems, loading: recurringLoading } = useRecurringExpenses();
+ 
+@@ -151,7 +153,7 @@ export default function DashboardPage() {
+           </div>
+ 
+           {/* Summary cards */}
+-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
++          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+             <SummaryCard
+               label="Total Income"
+               value={formatNPR(totalIncome)}
+@@ -176,6 +178,14 @@ export default function DashboardPage() {
+               iconBg="bg-accent-soft"
+               iconText="text-accent"
+             />
++            <SummaryCard
++              label="Udhaar Due"
++              value={formatNPR(udhaarDue)}
++              sub={loans.length > 0 ? `Across ${loans.length} udhaar` : "No credit taken"}
++              Icon={HandCoins}
++              iconBg="bg-negative-soft"
++              iconText="text-negative"
++            />
+           </div>
+ 
+           {/* Cash flow trend — new: income vs. expense over the last 6 months */}
+diff --git a/app/types/index.ts b/app/types/index.ts
+index 592c66f..ae0cbae 100644
+--- a/app/types/index.ts
++++ b/app/types/index.ts
+@@ -109,3 +109,41 @@ export interface PaymentStatusSummary {
+   count: number;
+ }
+ 
++/**
++ * Where a loan/credit (udhaar) came from. "Udhaar" — buying pesticide or
++ * seed on credit from the local agrovet, or borrowing from a cooperative
++ * or a relative — is one of the most common ways Nepali smallholder
++ * farmers finance a season, so it gets its own first-class record rather
++ * than being force-fit into Expense or Income.
++ */
++export type LoanSource = "Agrovet" | "Cooperative" | "Bank" | "Relative/Neighbor" | "Other";
++
++/**
++ * A single credit/loan record — money the farmer OWES, not earns.
++ * Mirrors Income's amountPaid/total shape, just flipped: amountRepaid
++ * grows toward `amount` instead of amountPaid growing toward a sale total.
++ */
++export interface Loan {
++  id: string;
++  lenderName: string;    // e.g. "Ram Krishi Pasal", "Sunita didi"
++  source: LoanSource;
++  crop?: string;          // optional — what the credit was taken for
++  amount: number;          // total credit/loan amount taken, in NPR
++  amountRepaid: number;    // how much has been paid back so far
++  dateTaken: string;       // "YYYY-MM-DD"
++  dueDate?: string;        // "YYYY-MM-DD" — optional
++  note: string;
++  billImage?: string;      // optional receipt/chit photo, stored as a base64 data URL
++  createdAt: string;
++}
++
++/** What the add/edit loan form holds before it becomes a Loan record */
++export type LoanFormData = Omit<Loan, "id" | "createdAt">;
++
++/** Rolled-up totals per repayment status, mirrors PaymentStatusSummary */
++export interface LoanStatusSummary {
++  status: PaymentStatus;
++  total: number;   // sum of loan amounts in this status
++  count: number;
++}
++
+diff --git a/app/utils/constants.ts b/app/utils/constants.ts
+index 4f42937..d014e53 100644
+--- a/app/utils/constants.ts
++++ b/app/utils/constants.ts
+@@ -4,7 +4,7 @@
+ //  options so they're easy to update later.
+ // ─────────────────────────────────────────────
+ 
+-import { ExpenseCategory, CropType } from "@/app/types";
++import { ExpenseCategory, CropType, LoanSource } from "@/app/types";
+ 
+ /** Category metadata: label, emoji, tailwind colour classes */
+ export const CATEGORIES: {
+@@ -44,3 +44,12 @@ export const CROPS: { value: CropType | "All Crops"; label: string; emoji: strin
+   { value: "Farshi",      label: "Farshi",      emoji: "🎃" },
+   { value: "Other",      label: "Other",      emoji: "🌱" },
+ ];
++
++/** Where udhaar (credit) typically comes from for a Nepali smallholder farmer */
++export const LOAN_SOURCES: { value: LoanSource; label: string; emoji: string }[] = [
++  { value: "Agrovet",           label: "Agrovet / Krishi Pasal", emoji: "🧪" },
++  { value: "Cooperative",       label: "Cooperative",            emoji: "🏦" },
++  { value: "Bank",               label: "Bank",                   emoji: "🏛️" },
++  { value: "Relative/Neighbor",  label: "Relative / Neighbor",    emoji: "🤝" },
++  { value: "Other",               label: "Other",                  emoji: "📝" },
++];
+diff --git a/app/utils/helpers.ts b/app/utils/helpers.ts
+index dad99dd..52dc4c3 100644
+--- a/app/utils/helpers.ts
++++ b/app/utils/helpers.ts
+@@ -7,12 +7,14 @@
+ import {
+   Expense,
+   Income,
++  Loan,
+   CategorySummary,
+   MonthlySummary,
+   CropProfitLoss,
+   PaymentStatus,
+   PaymentStatusSummary,
+   BuyerDue,
++  LoanStatusSummary,
+ } from "@/app/types";
+ import { CATEGORIES, CROPS } from "./constants";
+ import { format, parseISO, startOfMonth } from "date-fns";
+@@ -111,6 +113,57 @@ export function totalAmountDue(income: Income[]): number {
+   return income.reduce((acc, i) => acc + (i.ratePerKg * i.quantityKg - i.amountPaid), 0);
+ }
+ 
++// ── Loan (udhaar) helpers ─────────────────────
++// Same shape as the Income payment-status helpers above, just flipped:
++// a Loan's `amountRepaid` grows toward `amount` instead of an Income's
++// `amountPaid` growing toward a sale total.
++
++/** Total credit taken across an array of loans, regardless of repaid/due */
++export function grandLoanTotal(loans: Loan[]): number {
++  return loans.reduce((acc, l) => acc + l.amount, 0);
++}
++
++/** Total still owed to lenders across all loans ("udhaar due") */
++export function totalLoanDue(loans: Loan[]): number {
++  return loans.reduce((acc, l) => acc + (l.amount - l.amountRepaid), 0);
++}
++
++/**
++ * Derive a loan's repayment status straight from its numbers.
++ * Never stored — always computed — so it can never go stale.
++ */
++export function getLoanStatus(loan: Pick<Loan, "amount" | "amountRepaid">): PaymentStatus {
++  if (loan.amountRepaid <= 0) return "Due";
++  if (loan.amountRepaid >= loan.amount) return "Paid";
++  return "Partial";
++}
++
++/** How much of a loan is still outstanding (never negative) */
++export function amountDueForLoan(loan: Pick<Loan, "amount" | "amountRepaid">): number {
++  return Math.max(loan.amount - loan.amountRepaid, 0);
++}
++
++/** Roll loans up into Paid / Partial / Due buckets — powers the Loans page stat cards */
++export function buildLoanStatusSummary(loans: Loan[]): LoanStatusSummary[] {
++  const buckets: Record<PaymentStatus, { total: number; count: number }> = {
++    Paid: { total: 0, count: 0 },
++    Partial: { total: 0, count: 0 },
++    Due: { total: 0, count: 0 },
++  };
++
++  for (const loan of loans) {
++    const status = getLoanStatus(loan);
++    buckets[status].total += loan.amount;
++    buckets[status].count += 1;
++  }
++
++  return (["Paid", "Partial", "Due"] as PaymentStatus[]).map((status) => ({
++    status,
++    total: buckets[status].total,
++    count: buckets[status].count,
++  }));
++}
++
+ /**
+  * Derive a sale's payment status straight from its numbers.
+  * Never stored — always computed — so it can never go stale.
+diff --git a/models/Loan.ts b/models/Loan.ts
+new file mode 100644
+index 0000000..38257a5
+--- /dev/null
++++ b/models/Loan.ts
+@@ -0,0 +1,53 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Loan (Udhaar) Model
++//  One document per credit/loan a farmer has taken —
++//  from an agrovet, cooperative, bank, or a relative/
++//  neighbor. Same userId-scoping pattern as every other
++//  model, and the same "paid so far vs. total" derived-
++//  status idea as Income's amountPaid vs. sale total —
++//  just flipped: amountRepaid grows toward `amount`
++//  instead of amountPaid growing toward a sale total.
++// ─────────────────────────────────────────────
++
++import { Schema, models, model, Types } from "mongoose";
++
++export const LOAN_SOURCES = ["Agrovet", "Cooperative", "Bank", "Relative/Neighbor", "Other"] as const;
++export type LoanSource = (typeof LOAN_SOURCES)[number];
++
++export interface ILoan {
++  _id: string;
++  userId: Types.ObjectId;
++  lenderName: string; // e.g. "Ram Krishi Pasal", "Sunita didi"
++  source: LoanSource;
++  crop?: string; // optional — what the credit was taken for
++  amount: number; // total credit/loan amount taken, in NPR
++  amountRepaid: number; // how much has been paid back so far
++  dateTaken: string; // "YYYY-MM-DD"
++  dueDate?: string; // "YYYY-MM-DD" — optional
++  note: string;
++  billImage?: string; // optional receipt/chit photo, stored as a base64 data URL
++  createdAt: Date;
++}
++
++const LoanSchema = new Schema<ILoan>(
++  {
++    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
++    lenderName: { type: String, required: true, trim: true },
++    source: { type: String, enum: LOAN_SOURCES, default: "Other" },
++    crop: { type: String, trim: true },
++    amount: { type: Number, required: true, min: 0 },
++    amountRepaid: { type: Number, required: true, min: 0, default: 0 },
++    dateTaken: { type: String, required: true },
++    dueDate: { type: String },
++    note: { type: String, default: "", trim: true },
++    billImage: { type: String, default: "" },
++  },
++  { timestamps: true }
++);
++
++// Speeds up the common query: "all of this user's loans, newest first"
++LoanSchema.index({ userId: 1, dateTaken: -1 });
++
++export const Loan = models.Loan || model<ILoan>("Loan", LoanSchema);
++
++export default Loan;
+diff --git a/proxy.ts b/proxy.ts
+index 83b51d9..893d088 100644
+--- a/proxy.ts
++++ b/proxy.ts
+@@ -27,8 +27,19 @@ import { AUTH_COOKIE, verifyAuthToken } from "@/lib/auth";
+ 
+ const AUTH_PAGES = ["/login", "/signup"];
+ 
++// Routes that authenticate themselves with something other than the user's
++// JWT cookie (e.g. a cron job carrying CRON_SECRET, not a logged-in
++// farmer's session) — the proxy must NOT demand a user cookie on these,
++// or the cron caller gets a 401 before the route's own check ever runs.
++const SELF_AUTHENTICATING_ROUTES = ["/api/recurring/generate"];
++
+ export async function proxy(req: NextRequest) {
+   const { pathname } = req.nextUrl;
++
++  if (SELF_AUTHENTICATING_ROUTES.includes(pathname)) {
++    return NextResponse.next();
++  }
++
+   const token = req.cookies.get(AUTH_COOKIE)?.value;
+   const user = await verifyAuthToken(token);
+ 
+@@ -64,9 +75,19 @@ export const config = {
+     "/expenses/:path*",
+     "/income/:path*",
+     "/analytics/:path*",
++    "/budgets/:path*",
++    "/recurring/:path*",
++    "/crops/:path*",
++    "/loans/:path*",
++    "/profile/:path*",
+     "/login",
+     "/signup",
+     "/api/expenses/:path*",
+     "/api/income/:path*",
++    "/api/budgets/:path*",
++    "/api/recurring/:path*",
++    "/api/crops/:path*",
++    "/api/loans/:path*",
++    "/api/user/:path*",
+   ],
+ };

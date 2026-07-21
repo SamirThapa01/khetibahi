@@ -23,7 +23,8 @@ import {
   Wheat,
   Leaf,
   PiggyBank,
-  Repeat
+  Repeat,
+  HandCoins
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -31,6 +32,7 @@ const NAV = [
   { href: "/",          label: "Dashboard", Icon: LayoutDashboard },
   { href: "/income",    label: "Income",    Icon: Coins           },
   { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
   { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
  { href: "/recurring", label: "Recurring", Icon: Repeat          },
   { href: "/crops",     label: "Crops",     Icon: Leaf            },

@@ -27,8 +27,19 @@ import { AUTH_COOKIE, verifyAuthToken } from "@/lib/auth";
 
 const AUTH_PAGES = ["/login", "/signup"];
 
+// Routes that authenticate themselves with something other than the user's
+// JWT cookie (e.g. a cron job carrying CRON_SECRET, not a logged-in
+// farmer's session) — the proxy must NOT demand a user cookie on these,
+// or the cron caller gets a 401 before the route's own check ever runs.
+const SELF_AUTHENTICATING_ROUTES = ["/api/recurring/generate"];
+
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (SELF_AUTHENTICATING_ROUTES.includes(pathname)) {
+    return NextResponse.next();
+  }
+
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   const user = await verifyAuthToken(token);
 
@@ -64,9 +75,19 @@ export const config = {
     "/expenses/:path*",
     "/income/:path*",
     "/analytics/:path*",
+    "/budgets/:path*",
+    "/recurring/:path*",
+    "/crops/:path*",
+    "/loans/:path*",
+    "/profile/:path*",
     "/login",
     "/signup",
     "/api/expenses/:path*",
     "/api/income/:path*",
+    "/api/budgets/:path*",
+    "/api/recurring/:path*",
+    "/api/crops/:path*",
+    "/api/loans/:path*",
+    "/api/user/:path*",
   ],
 };

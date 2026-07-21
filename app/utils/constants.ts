@@ -4,7 +4,7 @@
 //  options so they're easy to update later.
 // ─────────────────────────────────────────────
 
-import { ExpenseCategory, CropType } from "@/app/types";
+import { ExpenseCategory, CropType, LoanSource } from "@/app/types";
 
 /** Category metadata: label, emoji, tailwind colour classes */
 export const CATEGORIES: {
@@ -43,4 +43,13 @@ export const CROPS: { value: CropType | "All Crops"; label: string; emoji: strin
   { value: "Kakro",       label: "Kakro",       emoji: "🥒" },
   { value: "Farshi",      label: "Farshi",      emoji: "🎃" },
   { value: "Other",      label: "Other",      emoji: "🌱" },
+];
+
+/** Where udhaar (credit) typically comes from for a Nepali smallholder farmer */
+export const LOAN_SOURCES: { value: LoanSource; label: string; emoji: string }[] = [
+  { value: "Agrovet",           label: "Agrovet / Krishi Pasal", emoji: "🧪" },
+  { value: "Cooperative",       label: "Cooperative",            emoji: "🏦" },
+  { value: "Bank",               label: "Bank",                   emoji: "🏛️" },
+  { value: "Relative/Neighbor",  label: "Relative / Neighbor",    emoji: "🤝" },
+  { value: "Other",               label: "Other",                  emoji: "📝" },
 ];

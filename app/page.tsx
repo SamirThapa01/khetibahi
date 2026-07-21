@@ -8,9 +8,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3, PiggyBank, Repeat } from "lucide-react";
+import { Plus, Wallet, TrendingUp, Receipt, Sprout, Coins, TrendingDown, Users, Clock3, PiggyBank, Repeat, HandCoins } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
+import { useLoans } from "@/app/hooks/useLoans";
 import SummaryCard from "@/app/components/SummaryCard";
 import ExpenseForm from "@/app/components/ExpenseForm";
 import ExpenseRow from "@/app/components/ExpenseRow";
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   } = useExpenses();
 
   const { income, totalIncome, isLoaded: incomeLoaded } = useIncome();
+  const { totalDue: udhaarDue, loans } = useLoans();
   const { budgets } = useBudgets(expenses);
  const { items: recurringItems, loading: recurringLoading } = useRecurringExpenses();
 
@@ -151,7 +153,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <SummaryCard
               label="Total Income"
               value={formatNPR(totalIncome)}
@@ -175,6 +177,14 @@ export default function DashboardPage() {
               Icon={Receipt}
               iconBg="bg-accent-soft"
               iconText="text-accent"
+            />
+            <SummaryCard
+              label="Udhaar Due"
+              value={formatNPR(udhaarDue)}
+              sub={loans.length > 0 ? `Across ${loans.length} udhaar` : "No credit taken"}
+              Icon={HandCoins}
+              iconBg="bg-negative-soft"
+              iconText="text-negative"
             />
           </div>
 
