@@ -8,7 +8,7 @@ import RecurringExpenseForm, { RecurringExpenseSubmitData } from "@/app/componen
 import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
 import { CATEGORIES } from "@/app/utils/constants";
 import { formatNPR } from "@/app/utils/helpers";
-import { ListItemsSkeleton } from "@/app/components/Skeleton";
+import { RecurringSkeleton } from "@/app/components/Skeleton";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -52,7 +52,7 @@ export default function RecurringPage() {
   }
 
   if (loading) {
-    return <ListItemsSkeleton items={4} />;
+    return <RecurringSkeleton />;
   }
 
   return (

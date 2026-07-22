@@ -8,40 +8,34 @@
 //  Contains: search, dark-mode toggle, bell, user.
 //
 //  Only shown when logged in and not on auth pages.
+//
+//  Routes that don't fit the mobile bottom nav
+//  (Udhaar/Budgets/Recurring) used to live behind
+//  a gear-icon overflow menu here. They've since
+//  moved into the Profile page's Quick Links
+//  section — Profile is already one tap away via
+//  the avatar chip below, so there's no longer a
+//  separate gear icon.
 // ─────────────────────────────────────────────
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, Moon, Sun, Bell, ChevronDown, Settings, PiggyBank, Repeat, HandCoins, X, AlertTriangle, Clock3, CheckCircle2 } from "lucide-react";
+import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2 } from "lucide-react";
 import { useDarkMode } from "@/app/hooks/useDarkMode";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNotifications } from "@/app/hooks/useNotifications";
 
 const AUTH_PAGES = ["/login", "/signup"];
 
-// Destinations that don't fit on the mobile bottom nav (Navbar.tsx) —
-// reachable from here instead via the gear icon (mobile only; on
-// desktop the Sidebar already lists every route).
-const MORE_NAV = [
-  { href: "/loans",     label: "Udhaar",    Icon: HandCoins },
-  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank },
-  { href: "/recurring", label: "Recurring", Icon: Repeat    },
-];
-
 export default function TopBar() {
   const pathname       = usePathname();
   const { isDark, toggle } = useDarkMode();
   const { user }       = useAuth();
-  const [moreOpen, setMoreOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, dismiss } = useNotifications();
 
   if (AUTH_PAGES.includes(pathname) || !user) return null;
-
-  const moreIsActive = MORE_NAV.some(
-    ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
-  );
 
   // Build initials: "Ram Bahadur" → "RB"
   const initials = user.name
@@ -64,19 +58,6 @@ export default function TopBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-1 ml-auto">
-        {/* Gear — mobile only. Opens the overflow sheet for routes that
-            don't fit on the bottom tab bar (desktop Sidebar already
-            lists these, so the button is hidden there). */}
-        <button
-          onClick={() => { setMoreOpen(true); setNotifOpen(false); }}
-          aria-label="More menu"
-          className={`sm:hidden p-2 rounded-xl transition-colors ${
-            moreIsActive ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
-          }`}
-        >
-          <Settings className="w-4 h-4" />
-        </button>
-
         {/* Dark mode toggle */}
         <button
           onClick={toggle}
@@ -88,7 +69,7 @@ export default function TopBar() {
 
         {/* Bell — shows a count badge and opens the notifications panel */}
         <button
-          onClick={() => { setNotifOpen((v) => !v); setMoreOpen(false); }}
+          onClick={() => setNotifOpen((v) => !v)}
           aria-label="Notifications"
           className={`relative p-2 rounded-xl transition-colors ${
             notifOpen ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
@@ -102,10 +83,13 @@ export default function TopBar() {
           )}
         </button>
 
-        {/* User chip */}
+        {/* User chip — tap to open Profile, which now also hosts Udhaar,
+            Budgets, and Recurring quick links + logout on mobile. */}
         <Link
           href="/profile"
-          className="flex items-center gap-2 pl-2 pr-2 py-1 rounded-xl hover:bg-surface-2 transition-colors select-none ml-1"
+          className={`flex items-center gap-2 pl-2 pr-2 py-1 rounded-xl hover:bg-surface-2 transition-colors select-none ml-1 ${
+            pathname === "/profile" ? "bg-surface-2" : ""
+          }`}
         >
           {/* Avatar circle */}
           {user.profileImage ? (
@@ -178,49 +162,6 @@ export default function TopBar() {
           </div>
         </div>
       )}
-
-      {/* Overflow panel — gear icon opens this (mobile only). Anchored
-          under the gear button as a small dropdown, same footprint as
-          the notifications panel, instead of a full-height side sheet.
-          Always mounted so the transition can animate both directions. */}
-      <div
-        className={`sm:hidden fixed inset-0 z-50 transition-opacity duration-200 ${
-          moreOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-        onClick={() => setMoreOpen(false)}
-      >
-        <div
-          className={`absolute right-3 sm:right-6 top-14 mt-2 w-56 max-w-[85vw] bg-surface border border-line rounded-2xl shadow-lift origin-top-right transition-all duration-200 ease-out ${
-            moreOpen ? "opacity-100 scale-100 translate-y-0" : "opacity-0 scale-95 -translate-y-1"
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-line">
-            <span className="text-sm font-display font-semibold text-ink">More</span>
-            <button onClick={() => setMoreOpen(false)} aria-label="Close" className="p-1 text-ink-faint">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex flex-col gap-1 p-2">
-            {MORE_NAV.map(({ href, label, Icon }) => {
-              const active = pathname === href || pathname.startsWith(`${href}/`);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={() => setMoreOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                    active ? "text-brand bg-brand/10" : "text-ink-muted hover:bg-surface-2"
-                  }`}
-                >
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  {label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
     </header>
   );
 }
