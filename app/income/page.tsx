@@ -17,11 +17,13 @@ import {
   CircleDollarSign,
   Clock3,
   Wallet,
+  Users,
 } from "lucide-react";
 import { useIncomeTable } from "@/app/hooks/useIncomeTable";
 import IncomeForm from "@/app/components/IncomeForm";
 import IncomeFilterBar from "@/app/components/IncomeFilterBar";
 import RecordPaymentModal from "@/app/components/RecordPaymentModal";
+import BuyerHistoryModal from "@/app/components/BuyerHistoryModal";
 import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 import { Income, IncomeFormData } from "@/app/types";
 import { exportIncomeToCSV, formatNPR, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
@@ -62,9 +64,10 @@ export default function IncomePage() {
   const [paying, setPaying]       = useState<Income | null>(null);
   const [incomeToDelete, setIncomeToDelete] = useState<{ id: string; crop: string; buyer: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [buyerHistoryOpen, setBuyerHistoryOpen] = useState(false);
 
-  // Is ANY modal open? The add/edit form, the payment modal, or the delete confirm modal.
-  const isAnyModalOpen = showForm || paying !== null || incomeToDelete !== null;
+  // Is ANY modal open? The add/edit form, the payment modal, the delete confirm modal, or buyer history.
+  const isAnyModalOpen = showForm || paying !== null || incomeToDelete !== null || buyerHistoryOpen;
 
   // 🔒 Lock background scroll while a modal is open — same logic
   // as the Expenses page, just inlined here (no shared hook file).
@@ -164,6 +167,13 @@ export default function IncomePage() {
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => setBuyerHistoryOpen(true)}
+              className="flex items-center gap-2 border border-line text-ink-muted text-sm font-medium px-3 py-2 rounded-xl hover:bg-surface-2 transition-colors"
+            >
+              <Users className="w-4 h-4" />
+              <span className="hidden sm:inline">Buyer History</span>
+            </button>
             <button
               onClick={handleExport}
               disabled={total === 0}
@@ -431,6 +441,9 @@ export default function IncomePage() {
           isLoading={isDeleting}
         />
       )}
+
+      {/* Modal: buyer history lookup — opens from the header button */}
+      {buyerHistoryOpen && <BuyerHistoryModal onClose={() => setBuyerHistoryOpen(false)} />}
     </>
   );
 }
