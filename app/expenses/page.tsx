@@ -24,6 +24,7 @@ import { Expense, ExpenseFormData } from "@/app/types";
 import { exportToCSV, formatNPR } from "@/app/utils/helpers";
 import { CATEGORIES } from "@/app/utils/constants";
 import ConfirmDeleteModal from "../components/Confirmdeletemodal";
+import { ListPageSkeleton } from "@/app/components/Skeleton";
 
 // Icon badge shown inside category stat cards
 const CATEGORY_ICONS: Record<string, { bg: string; icon: string }> = {
@@ -138,11 +139,7 @@ export default function ExpensesPage() {
     .slice(0, 4);
 
   if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <ListPageSkeleton statCount={4} />;
   }
 
   return (

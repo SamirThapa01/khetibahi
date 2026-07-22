@@ -27,6 +27,7 @@ import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import { CROPS, CATEGORIES } from "@/app/utils/constants";
 import { formatNPR, prettyDate, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
+import { CropDetailSkeleton } from "@/app/components/Skeleton";
 
 const STATUS_META = {
   Paid:    { label: "Paid",    Icon: CheckCircle2,     text: "text-brand",    bg: "bg-brand-soft" },
@@ -55,7 +56,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
   }, [expenses, income, cropParam]);
 
   if (!isLoaded || !incomeLoaded) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <CropDetailSkeleton />;
   }
 
   if (!cropMeta) {

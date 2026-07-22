@@ -16,6 +16,7 @@ import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import { CROPS } from "@/app/utils/constants";
 import { formatNPR, buildCropProfitLoss } from "@/app/utils/helpers";
+import { CropGridSkeleton } from "@/app/components/Skeleton";
 
 export default function CropsPage() {
   const { expenses, isLoaded } = useExpenses();
@@ -25,7 +26,7 @@ export default function CropsPage() {
   const displayCrops = CROPS.filter((c) => c.value !== "All Crops");
 
   if (!isLoaded || !incomeLoaded) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <CropGridSkeleton />;
   }
 
   const hasAnyData = expenses.length > 0 || income.length > 0;

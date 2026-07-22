@@ -23,6 +23,7 @@ import { format } from "date-fns";
 import { useBudgets } from "@/app/hooks/useBudgets";
 import { useRecurringExpenses } from "@/app/hooks/useRecurringExpenses";
 import BudgetProgress from "@/app/components/BudgetProgress";
+import { DashboardSkeleton } from "@/app/components/Skeleton";
 
 
 export default function DashboardPage() {
@@ -75,7 +76,7 @@ export default function DashboardPage() {
   }
 
   if (!isLoaded || !incomeLoaded) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <DashboardSkeleton />;
   }
 
   return (

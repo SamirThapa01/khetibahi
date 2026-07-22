@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Save, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import AvatarUpload from "@/app/components/AvatarUpload";
+import { ProfileSkeleton } from "@/app/components/Skeleton";
 
 export default function ProfilePage() {
   const { user, updateProfile, isLoading } = useAuth();
@@ -22,7 +23,7 @@ export default function ProfilePage() {
   const [saved, setSaved] = useState(false);
 
   if (isLoading) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <ProfileSkeleton />;
   }
 
   if (!user) {

@@ -32,6 +32,7 @@ import RecordRepaymentModal from "@/app/components/RecordRepaymentModal";
 import RecordInterestPaymentModal from "@/app/components/RecordInterestPaymentModal";
 import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
 import ImageLightbox from "@/app/components/ImageLightbox";
+import { ListPageSkeleton } from "@/app/components/Skeleton";
 import { Loan, LoanFormData } from "@/app/types";
 import {
   formatNPR,
@@ -145,11 +146,7 @@ export default function LoansPage() {
   const pendingCount = statusSummary.filter((s) => s.status !== "Paid").reduce((sum, s) => sum + s.count, 0);
 
   if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <ListPageSkeleton statCount={4} />;
   }
 
   return (

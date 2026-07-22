@@ -17,6 +17,7 @@ import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
 import { CROPS } from "@/app/utils/constants";
 import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDate } from "@/app/utils/helpers";
 import { CropType } from "@/app/types";
+import { AnalyticsSkeleton } from "@/app/components/Skeleton";
 
 const STATUS_META = {
   Paid:    { label: "Paid",    Icon: CheckCircle2,     text: "text-brand",    bg: "bg-brand-soft",    bar: "bg-brand" },
@@ -62,7 +63,7 @@ export default function AnalyticsPage() {
   const buyerDues = useMemo(() => buildBuyerDues(income), [income]);
 
   if (!isLoaded || !incomeLoaded) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <AnalyticsSkeleton />;
   }
 
   if (expenses.length === 0 && income.length === 0) {

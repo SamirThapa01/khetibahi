@@ -8,6 +8,7 @@ import { useBudgets } from "@/app/hooks/useBudgets";
 import BudgetForm from "@/app/components/BudgetForm";
 import ConfirmDeleteModal from "@/app/components/Confirmdeletemodal";
 import { formatNPR } from "@/app/utils/helpers";
+import { ListItemsSkeleton } from "@/app/components/Skeleton";
 
 export default function BudgetsPage() {
   const { expenses, isLoaded } = useExpenses();
@@ -47,7 +48,7 @@ export default function BudgetsPage() {
   }
 
   if (!isLoaded || loading) {
-    return <div className="text-center text-ink-faint py-20">Loading…</div>;
+    return <ListItemsSkeleton items={3} />;
   }
 
   return (

@@ -26,6 +26,7 @@ import ConfirmDeleteModal from "../components/Confirmdeletemodal";
 import { Income, IncomeFormData } from "@/app/types";
 import { exportIncomeToCSV, formatNPR, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CROPS } from "@/app/utils/constants";
+import { ListPageSkeleton } from "@/app/components/Skeleton";
 
 // Visual language for each payment status — reused across the badge and the stat card
 const STATUS_META = {
@@ -145,11 +146,7 @@ export default function IncomePage() {
   }
 
   if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <ListPageSkeleton statCount={4} />;
   }
 
   return (
