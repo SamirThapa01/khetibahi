@@ -24,6 +24,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Expense, ExpenseFormData, ExpenseCategory, CropType } from "@/app/types";
 import { buildCategorySummaries, buildMonthlySummaries, grandTotal } from "@/app/utils/helpers";
 import { useInformation } from "../components/Information";
+import { useOfflineQueue } from "./useOfflineQueue";
+import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
 
 
 /** What callers can control via filters */
@@ -70,10 +72,50 @@ export function useExpenses() {
     };
   }, []);
 
+  // ── Offline queue ───────────────────────────
+  const handleApplied = useCallback(
+    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
+      if (err || !res) return; // network still down; stays queued, retried next reconnect
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
+        if (mutation.method === "POST" && mutation.tempId) {
+          setExpenses((prev) => prev.filter((e) => e.id !== mutation.tempId));
+        }
+        return;
+      }
+      if (mutation.method === "POST" && mutation.tempId) {
+        const saved: Expense = await res.json();
+        setExpenses((prev) => prev.map((e) => (e.id === mutation.tempId ? saved : e)));
+      } else if (mutation.method === "PUT" && mutation.targetId) {
+        const updated: Expense = await res.json();
+        setExpenses((prev) => prev.map((e) => (e.id === mutation.targetId ? updated : e)));
+      }
+      show("success", `Synced: ${mutation.label}`);
+    },
+    [show]
+  );
+
+  const { isOnline, pendingCount, enqueue } = useOfflineQueue("expenses", handleApplied);
+
   // ── CRUD actions ───────────────────────────
 
   /** Add a brand-new expense — saved to MongoDB immediately */
   const addExpense = useCallback(async (data: ExpenseFormData): Promise<void> => {
+    if (!isOnline) {
+      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const optimistic: Expense = { ...data, id: tempId, createdAt: new Date().toISOString() };
+      setExpenses((prev) => [optimistic, ...prev]);
+      enqueue({
+        method: "POST",
+        url: "/api/expenses",
+        body: data,
+        label: `Add expense: ${data.category} (${data.crop})`,
+        tempId,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch("/api/expenses", {
         method: "POST",
@@ -93,10 +135,27 @@ export function useExpenses() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save expense.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   /** Update an existing expense (matched by id) */
   const updateExpense = useCallback(async (id: string, data: ExpenseFormData): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        updateQueuedCreateBody(id, data);
+        setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
+        return;
+      }
+      setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
+      enqueue({
+        method: "PUT",
+        url: `/api/expenses/${id}`,
+        body: data,
+        label: `Update expense: ${data.category} (${data.crop})`,
+        targetId: id,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/expenses/${id}`, {
         method: "PUT",
@@ -116,10 +175,27 @@ export function useExpenses() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update expense.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   /** Remove an expense permanently */
   const deleteExpense = useCallback(async (id: string): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        removeQueuedCreate(id);
+        setExpenses((prev) => prev.filter((e) => e.id !== id));
+        show("info", "Removed (was never synced)");
+        return;
+      }
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+      enqueue({
+        method: "DELETE",
+        url: `/api/expenses/${id}`,
+        label: "Delete expense record",
+        targetId: id,
+      });
+      show("info", "No connection — will delete once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -134,7 +210,7 @@ export function useExpenses() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete expense.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   // ── Filtering ─────────────────────────────
 
@@ -178,6 +254,8 @@ export function useExpenses() {
     totalSpend,
     isLoaded,
     error,
+    isOnline,
+    pendingCount,
 
     // actions
     addExpense,

@@ -11,8 +11,10 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Loan, LoanFormData, LoanSource, PaymentStatus } from "@/app/types";
-import { grandLoanTotal, totalLoanDue, getLoanStatus, buildLoanStatusSummary } from "@/app/utils/helpers";
+import { grandLoanTotal, totalLoanDue, getLoanStatus, buildLoanStatusSummary, formatNPR } from "@/app/utils/helpers";
 import { useInformation } from "../components/Information";
+import { useOfflineQueue } from "./useOfflineQueue";
+import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
 
 export interface LoanFilters {
   source: LoanSource | "All";
@@ -56,10 +58,59 @@ export function useLoans() {
     };
   }, []);
 
+  // ── Offline queue ───────────────────────────
+  const handleApplied = useCallback(
+    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
+      if (err || !res) return; // network still down; stays queued, retried next reconnect
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
+        if (mutation.method === "POST" && mutation.tempId) {
+          setLoans((prev) => prev.filter((l) => l.id !== mutation.tempId));
+        }
+        return;
+      }
+      if (mutation.method === "POST" && mutation.tempId) {
+        const saved: Loan = await res.json();
+        setLoans((prev) => prev.map((l) => (l.id === mutation.tempId ? saved : l)));
+      } else if (mutation.method === "PUT" && mutation.targetId) {
+        const updated: Loan = await res.json();
+        setLoans((prev) => prev.map((l) => (l.id === mutation.targetId ? updated : l)));
+      } else if (mutation.method === "POST" && mutation.targetId) {
+        // Interest payment — the endpoint returns the whole updated loan.
+        const updated: Loan = await res.json();
+        setLoans((prev) => prev.map((l) => (l.id === mutation.targetId ? updated : l)));
+      }
+      show("success", `Synced: ${mutation.label}`);
+    },
+    [show]
+  );
+
+  const { isOnline, pendingCount, enqueue } = useOfflineQueue("loans", handleApplied);
+
   // ── CRUD actions ───────────────────────────
 
   const addLoan = useCallback(
     async (data: LoanFormData): Promise<void> => {
+      if (!isOnline) {
+        const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const optimistic: Loan = {
+          ...data,
+          id: tempId,
+          interestPayments: [],
+          createdAt: new Date().toISOString(),
+        };
+        setLoans((prev) => [optimistic, ...prev]);
+        enqueue({
+          method: "POST",
+          url: "/api/loans",
+          body: data,
+          label: `Add udhaar: ${data.lenderName}`,
+          tempId,
+        });
+        show("info", "No connection — saved on this device, will sync once you're back online");
+        return;
+      }
       try {
         const res = await fetch("/api/loans", {
           method: "POST",
@@ -80,11 +131,32 @@ export function useLoans() {
         setError(err instanceof Error ? err.message : "Could not save udhaar.");
       }
     },
-    [show]
+    [isOnline, enqueue, show]
   );
 
   const updateLoan = useCallback(
     async (id: string, data: LoanFormData): Promise<void> => {
+      if (!isOnline) {
+        if (id.startsWith("offline-")) {
+          updateQueuedCreateBody(id, data);
+          setLoans((prev) =>
+            prev.map((l) => (l.id === id ? { ...data, id, interestPayments: l.interestPayments, createdAt: l.createdAt } : l))
+          );
+          return;
+        }
+        setLoans((prev) =>
+          prev.map((l) => (l.id === id ? { ...data, id, interestPayments: l.interestPayments, createdAt: l.createdAt } : l))
+        );
+        enqueue({
+          method: "PUT",
+          url: `/api/loans/${id}`,
+          body: data,
+          label: `Update udhaar: ${data.lenderName}`,
+          targetId: id,
+        });
+        show("info", "No connection — saved on this device, will sync once you're back online");
+        return;
+      }
       try {
         const res = await fetch(`/api/loans/${id}`, {
           method: "PUT",
@@ -105,11 +177,28 @@ export function useLoans() {
         setError(err instanceof Error ? err.message : "Could not update udhaar.");
       }
     },
-    [show]
+    [isOnline, enqueue, show]
   );
 
   const deleteLoan = useCallback(
     async (id: string): Promise<void> => {
+      if (!isOnline) {
+        if (id.startsWith("offline-")) {
+          removeQueuedCreate(id);
+          setLoans((prev) => prev.filter((l) => l.id !== id));
+          show("info", "Removed (was never synced)");
+          return;
+        }
+        setLoans((prev) => prev.filter((l) => l.id !== id));
+        enqueue({
+          method: "DELETE",
+          url: `/api/loans/${id}`,
+          label: "Delete udhaar record",
+          targetId: id,
+        });
+        show("info", "No connection — will delete once you're back online");
+        return;
+      }
       try {
         const res = await fetch(`/api/loans/${id}`, { method: "DELETE" });
         if (!res.ok) {
@@ -125,7 +214,7 @@ export function useLoans() {
         setError(err instanceof Error ? err.message : "Could not delete udhaar.");
       }
     },
-    [show]
+    [isOnline, enqueue, show]
   );
 
   /**
@@ -166,6 +255,30 @@ export function useLoans() {
    */
   const recordInterestPayment = useCallback(
     async (id: string, date: string, amount: number): Promise<void> => {
+      if (!isOnline) {
+        // A loan that hasn't synced yet has no real server id to attach an
+        // interest payment to, and the create endpoint doesn't accept
+        // interestPayments at creation time — so this one case can't be
+        // queued cleanly. Ask the farmer to redo it once the udhaar itself
+        // has synced, rather than silently losing it or building a chain
+        // of dependent offline mutations for a narrow edge case.
+        if (id.startsWith("offline-")) {
+          show("error", "This udhaar hasn't synced yet — record the interest payment again once you're back online.");
+          return;
+        }
+        setLoans((prev) =>
+          prev.map((l) => (l.id === id ? { ...l, interestPayments: [...l.interestPayments, { date, amount }] } : l))
+        );
+        enqueue({
+          method: "POST",
+          url: `/api/loans/${id}/interest`,
+          body: { date, amount },
+          label: `Interest payment: ${formatNPR(amount)}`,
+          targetId: id,
+        });
+        show("info", "No connection — saved on this device, will sync once you're back online");
+        return;
+      }
       try {
         const res = await fetch(`/api/loans/${id}/interest`, {
           method: "POST",
@@ -186,7 +299,7 @@ export function useLoans() {
         setError(err instanceof Error ? err.message : "Could not record interest payment.");
       }
     },
-    [show]
+    [isOnline, enqueue, show]
   );
 
   // ── Filtering ─────────────────────────────
@@ -227,6 +340,8 @@ export function useLoans() {
     statusSummary,
     isLoaded,
     error,
+    isOnline,
+    pendingCount,
 
     addLoan,
     updateLoan,

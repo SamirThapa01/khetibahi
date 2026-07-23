@@ -1,0 +1,1185 @@
+diff --git a/app/components/TopBar.tsx b/app/components/TopBar.tsx
+index eb4bad8..8fd4f34 100644
+--- a/app/components/TopBar.tsx
++++ b/app/components/TopBar.tsx
+@@ -21,10 +21,11 @@
+ import { useState } from "react";
+ import { usePathname } from "next/navigation";
+ import Link from "next/link";
+-import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2 } from "lucide-react";
++import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2, WifiOff, CloudUpload } from "lucide-react";
+ import { useDarkMode } from "@/app/hooks/useDarkMode";
+ import { useAuth } from "@/app/context/AuthContext";
+ import { useNotifications } from "@/app/hooks/useNotifications";
++import { useOfflineQueueSummary } from "@/app/hooks/useOfflineQueueSummary";
+ 
+ const AUTH_PAGES = ["/login", "/signup"];
+ 
+@@ -34,6 +35,7 @@ export default function TopBar() {
+   const { user }       = useAuth();
+   const [notifOpen, setNotifOpen] = useState(false);
+   const { notifications, dismiss } = useNotifications();
++  const { isOnline, pendingCount } = useOfflineQueueSummary();
+ 
+   if (AUTH_PAGES.includes(pathname) || !user) return null;
+ 
+@@ -45,72 +47,108 @@ export default function TopBar() {
+     .join("");
+ 
+   return (
+-    <header className="flex-shrink-0 flex items-center gap-3 px-4 sm:px-6 h-14 border-b border-line bg-surface/80 backdrop-blur-md sticky top-0 z-30">
+-      {/* Search */}
+-      <div className="relative flex-1 max-w-md">
+-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+-        <input
+-          type="text"
+-          placeholder="Search crops, income, expenses…"
+-          className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-surface-2 text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent"
+-        />
+-      </div>
+-
+-      {/* Right side */}
+-      <div className="flex items-center gap-1 ml-auto">
+-        {/* Dark mode toggle */}
+-        <button
+-          onClick={toggle}
+-          aria-label="Toggle dark mode"
+-          className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
+-        >
+-          {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+-        </button>
++    <div className="flex-shrink-0 sticky top-0 z-30 bg-surface/80 backdrop-blur-md border-b border-line">
++      <header className="flex items-center gap-3 px-4 sm:px-6 h-14">
++        {/* Search */}
++        <div className="relative flex-1 max-w-md">
++          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
++          <input
++            type="text"
++            placeholder="Search crops, income, expenses…"
++            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-surface-2 text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent"
++          />
++        </div>
+ 
+-        {/* Bell — shows a count badge and opens the notifications panel */}
+-        <button
+-          onClick={() => setNotifOpen((v) => !v)}
+-          aria-label="Notifications"
+-          className={`relative p-2 rounded-xl transition-colors ${
+-            notifOpen ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
+-          }`}
+-        >
+-          <Bell className="w-4 h-4" />
+-          {notifications.length > 0 && (
+-            <span className="absolute top-1 right-1 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-negative text-white text-[10px] font-bold leading-none">
+-              {notifications.length > 9 ? "9+" : notifications.length}
++        {/* Right side */}
++        <div className="flex items-center gap-1 ml-auto">
++          {/* Offline / pending-sync indicator — only shows up when it's relevant */}
++          {(!isOnline || pendingCount > 0) && (
++            <span
++              className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-xl mr-1 ${
++                !isOnline ? "bg-negative/10 text-negative" : "bg-accent/10 text-accent"
++              }`}
++            >
++              {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
++              {!isOnline
++                ? pendingCount > 0
++                  ? `Offline · ${pendingCount} pending`
++                  : "Offline"
++                : `Syncing ${pendingCount}…`}
+             </span>
+           )}
+-        </button>
+ 
+-        {/* User chip — tap to open Profile, which now also hosts Udhaar,
+-            Budgets, and Recurring quick links + logout on mobile. */}
+-        <Link
+-          href="/profile"
+-          className={`flex items-center gap-2 pl-2 pr-2 py-1 rounded-xl hover:bg-surface-2 transition-colors select-none ml-1 ${
+-            pathname === "/profile" ? "bg-surface-2" : ""
++          {/* Dark mode toggle */}
++          <button
++            onClick={toggle}
++            aria-label="Toggle dark mode"
++            className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
++          >
++            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
++          </button>
++
++          {/* Bell — shows a count badge and opens the notifications panel */}
++          <button
++            onClick={() => setNotifOpen((v) => !v)}
++            aria-label="Notifications"
++            className={`relative p-2 rounded-xl transition-colors ${
++              notifOpen ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
++            }`}
++          >
++            <Bell className="w-4 h-4" />
++            {notifications.length > 0 && (
++              <span className="absolute top-1 right-1 flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-negative text-white text-[10px] font-bold leading-none">
++                {notifications.length > 9 ? "9+" : notifications.length}
++              </span>
++            )}
++          </button>
++
++          {/* User chip — tap to open Profile, which now also hosts Udhaar,
++              Budgets, and Recurring quick links + logout on mobile. */}
++          <Link
++            href="/profile"
++            className={`flex items-center gap-2 pl-2 pr-2 py-1 rounded-xl hover:bg-surface-2 transition-colors select-none ml-1 ${
++              pathname === "/profile" ? "bg-surface-2" : ""
++            }`}
++          >
++            {/* Avatar circle */}
++            {user.profileImage ? (
++              // eslint-disable-next-line @next/next/no-img-element
++              <img
++                src={user.profileImage}
++                alt={user.name}
++                className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
++              />
++            ) : (
++              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-brand text-white text-xs font-bold flex-shrink-0">
++                {initials}
++              </span>
++            )}
++            <div className="hidden sm:block leading-tight">
++              <p className="text-sm font-semibold text-ink truncate max-w-[120px]">{user.name}</p>
++              <p className="text-[11px] text-ink-muted">Farm Owner</p>
++            </div>
++            <ChevronDown className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
++          </Link>
++        </div>
++      </header>
++
++      {/* Mobile equivalent of the offline/pending pill — full width strip
++          instead of squeezing into the header row, which is already tight
++          on small screens. */}
++      {(!isOnline || pendingCount > 0) && (
++        <div
++          className={`sm:hidden flex items-center justify-center gap-1.5 text-xs font-medium py-1.5 ${
++            !isOnline ? "bg-negative/10 text-negative" : "bg-accent/10 text-accent"
+           }`}
+         >
+-          {/* Avatar circle */}
+-          {user.profileImage ? (
+-            // eslint-disable-next-line @next/next/no-img-element
+-            <img
+-              src={user.profileImage}
+-              alt={user.name}
+-              className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
+-            />
+-          ) : (
+-            <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-brand text-white text-xs font-bold flex-shrink-0">
+-              {initials}
+-            </span>
+-          )}
+-          <div className="hidden sm:block leading-tight">
+-            <p className="text-sm font-semibold text-ink truncate max-w-[120px]">{user.name}</p>
+-            <p className="text-[11px] text-ink-muted">Farm Owner</p>
+-          </div>
+-          <ChevronDown className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
+-        </Link>
+-      </div>
++          {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
++          {!isOnline
++            ? pendingCount > 0
++              ? `Offline · ${pendingCount} change${pendingCount === 1 ? "" : "s"} pending`
++              : "Offline — changes will save on this device"
++            : `Syncing ${pendingCount} change${pendingCount === 1 ? "" : "s"}…`}
++        </div>
++      )}
+ 
+       {/* Notifications panel — bell icon opens this */}
+       {notifOpen && (
+@@ -162,6 +200,6 @@ export default function TopBar() {
+           </div>
+         </div>
+       )}
+-    </header>
++    </div>
+   );
+ }
+\ No newline at end of file
+diff --git a/app/hooks/useBudgets.ts b/app/hooks/useBudgets.ts
+index 16f29fb..8923fb4 100644
+--- a/app/hooks/useBudgets.ts
++++ b/app/hooks/useBudgets.ts
+@@ -2,6 +2,9 @@
+ 
+ import { useState, useEffect, useCallback } from "react";
+ import { Expense } from "@/app/types";
++import { useOfflineQueue } from "./useOfflineQueue";
++import { QueuedMutation, removeQueuedCreate } from "@/lib/offlineQueue";
++import { useInformation } from "@/app/components/Information";
+ 
+ export interface Budget {
+   _id: string;
+@@ -22,6 +25,7 @@ export function useBudgets(expenses: Expense[]) {
+   const [budgets, setBudgets] = useState<Budget[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
++  const { show } = useInformation();
+ 
+   const fetchBudgets = useCallback(async () => {
+     setLoading(true);
+@@ -37,11 +41,52 @@ export function useBudgets(expenses: Expense[]) {
+   }, []);
+ 
+   useEffect(() => {
+-    fetchBudgets();
++    queueMicrotask(fetchBudgets);
+   }, [fetchBudgets]);
+ 
++  // ── Offline queue ───────────────────────────
++  // Budgets are upsert-by-(category, crop, month) rather than having
++  // separate add/edit paths, so once a queued POST actually reaches the
++  // server the simplest correct thing is a full refetch — there's no
++  // single "this record became that record" swap to make like there is
++  // for Income/Expenses/Loans.
++  const handleApplied = useCallback(
++    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
++      if (err || !res) return; // network still down; stays queued, retried next reconnect
++      if (!res.ok) {
++        show("error", `Could not sync "${mutation.label}"`);
++        await fetchBudgets(); // drop whatever optimistic guess we made, trust the server
++        return;
++      }
++      show("success", `Synced: ${mutation.label}`);
++      await fetchBudgets();
++    },
++    [show, fetchBudgets]
++  );
++
++  const { isOnline, pendingCount, enqueue } = useOfflineQueue("budgets", handleApplied);
++
+   const setBudget = useCallback(
+     async (category: string, crop: string, month: string, amount: number) => {
++      if (!isOnline) {
++        const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
++        setBudgets((prev) => {
++          const existing = prev.find((b) => b.category === category && b.crop === crop && b.month === month);
++          if (existing) {
++            return prev.map((b) => (b === existing ? { ...b, amount } : b));
++          }
++          return [...prev, { _id: tempId, category, crop, month, amount }];
++        });
++        enqueue({
++          method: "POST",
++          url: "/api/budgets",
++          body: { category, crop, month, amount },
++          label: `Set budget: ${category === "All" ? "Overall" : category}${crop !== "All" ? ` · ${crop}` : ""}`,
++          tempId,
++        });
++        show("info", "No connection — saved on this device, will sync once you're back online");
++        return;
++      }
+       const res = await fetch("/api/budgets", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+@@ -50,14 +95,34 @@ export function useBudgets(expenses: Expense[]) {
+       if (!res.ok) throw new Error("Failed to save budget");
+       await fetchBudgets();
+     },
+-    [fetchBudgets]
++    [isOnline, enqueue, show, fetchBudgets]
+   );
+ 
+-  const deleteBudget = useCallback(async (id: string) => {
+-    const res = await fetch(`/api/budgets/${id}`, { method: "DELETE" });
+-    if (!res.ok) throw new Error("Failed to delete budget");
+-    setBudgets((prev) => prev.filter((b) => b._id !== id));
+-  }, []);
++  const deleteBudget = useCallback(
++    async (id: string) => {
++      if (!isOnline) {
++        if (id.startsWith("offline-")) {
++          removeQueuedCreate(id);
++          setBudgets((prev) => prev.filter((b) => b._id !== id));
++          show("info", "Removed (was never synced)");
++          return;
++        }
++        setBudgets((prev) => prev.filter((b) => b._id !== id));
++        enqueue({
++          method: "DELETE",
++          url: `/api/budgets/${id}`,
++          label: "Delete budget",
++          targetId: id,
++        });
++        show("info", "No connection — will delete once you're back online");
++        return;
++      }
++      const res = await fetch(`/api/budgets/${id}`, { method: "DELETE" });
++      if (!res.ok) throw new Error("Failed to delete budget");
++      setBudgets((prev) => prev.filter((b) => b._id !== id));
++    },
++    [isOnline, enqueue, show]
++  );
+ 
+   const withProgress: BudgetProgress[] = budgets.map((b) => {
+     const spent = expenses
+@@ -78,5 +143,5 @@ export function useBudgets(expenses: Expense[]) {
+     };
+   });
+ 
+-  return { budgets: withProgress, loading, error, setBudget, deleteBudget, refetch: fetchBudgets };
++  return { budgets: withProgress, loading, error, isOnline, pendingCount, setBudget, deleteBudget, refetch: fetchBudgets };
+ }
+\ No newline at end of file
+diff --git a/app/hooks/useCrops.ts b/app/hooks/useCrops.ts
+index 4d518b5..d871368 100644
+--- a/app/hooks/useCrops.ts
++++ b/app/hooks/useCrops.ts
+@@ -10,6 +10,9 @@
+ 
+ import { useState, useEffect, useCallback } from "react";
+ import { CROPS as BUILT_IN_CROPS } from "@/app/utils/constants";
++import { useOfflineQueue } from "./useOfflineQueue";
++import { QueuedMutation } from "@/lib/offlineQueue";
++import { useInformation } from "@/app/components/Information";
+ 
+ export interface CropOption {
+   value: string;
+@@ -21,6 +24,7 @@ export interface CropOption {
+ export function useCrops() {
+   const [customCrops, setCustomCrops] = useState<CropOption[]>([]);
+   const [loading, setLoading] = useState(true);
++  const { show } = useInformation();
+ 
+   const load = useCallback(async () => {
+     try {
+@@ -38,14 +42,47 @@ export function useCrops() {
+   }, []);
+ 
+   useEffect(() => {
+-    load();
++    queueMicrotask(load);
+   }, [load]);
+ 
++  // ── Offline queue ───────────────────────────
++  // A custom crop only has one meaningful field, its name — once the
++  // queued POST succeeds, refreshing the whole list from the server is
++  // simpler and just as correct as trying to reconcile one entry, and
++  // the existing de-dupe-by-name guard below means it can't double up.
++  const handleApplied = useCallback(
++    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
++      if (err || !res) return; // network still down; stays queued, retried next reconnect
++      if (!res.ok) {
++        show("error", `Could not sync "${mutation.label}"`);
++        return;
++      }
++      show("success", `Synced: ${mutation.label}`);
++      await load();
++    },
++    [show, load]
++  );
++
++  const { isOnline, pendingCount, enqueue } = useOfflineQueue("crops", handleApplied);
++
+   /** Adds a new vegetable for this farmer and returns it (or the existing match if it's a dupe). */
+   async function addCrop(name: string, emoji: string): Promise<CropOption | null> {
+     const trimmed = name.trim();
+     if (!trimmed) return null;
+ 
++    if (!isOnline) {
++      const option: CropOption = { value: trimmed, label: trimmed, emoji: emoji || "🌱", isCustom: true };
++      setCustomCrops((prev) => (prev.some((c) => c.value === option.value) ? prev : [...prev, option]));
++      enqueue({
++        method: "POST",
++        url: "/api/crops",
++        body: { name: trimmed, emoji: emoji || "🌱" },
++        label: `Add vegetable: ${trimmed}`,
++      });
++      show("info", "No connection — saved on this device, will sync once you're back online");
++      return option;
++    }
++
+     const res = await fetch("/api/crops", {
+       method: "POST",
+       headers: { "Content-Type": "application/json" },
+@@ -69,5 +106,5 @@ export function useCrops() {
+   // Built-in list first (with "All Crops" pinned at the top), then this farmer's own additions
+   const crops: CropOption[] = [...BUILT_IN_CROPS, ...customCrops];
+ 
+-  return { crops, customCrops, loading, addCrop, refresh: load };
++  return { crops, customCrops, loading, isOnline, pendingCount, addCrop, refresh: load };
+ }
+diff --git a/app/hooks/useExpenses.ts b/app/hooks/useExpenses.ts
+index 3d7a560..acc7d2f 100644
+--- a/app/hooks/useExpenses.ts
++++ b/app/hooks/useExpenses.ts
+@@ -24,6 +24,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
+ import { Expense, ExpenseFormData, ExpenseCategory, CropType } from "@/app/types";
+ import { buildCategorySummaries, buildMonthlySummaries, grandTotal } from "@/app/utils/helpers";
+ import { useInformation } from "../components/Information";
++import { useOfflineQueue } from "./useOfflineQueue";
++import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
+ 
+ 
+ /** What callers can control via filters */
+@@ -70,10 +72,50 @@ export function useExpenses() {
+     };
+   }, []);
+ 
++  // ── Offline queue ───────────────────────────
++  const handleApplied = useCallback(
++    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
++      if (err || !res) return; // network still down; stays queued, retried next reconnect
++      if (!res.ok) {
++        const body = await res.json().catch(() => ({}));
++        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
++        if (mutation.method === "POST" && mutation.tempId) {
++          setExpenses((prev) => prev.filter((e) => e.id !== mutation.tempId));
++        }
++        return;
++      }
++      if (mutation.method === "POST" && mutation.tempId) {
++        const saved: Expense = await res.json();
++        setExpenses((prev) => prev.map((e) => (e.id === mutation.tempId ? saved : e)));
++      } else if (mutation.method === "PUT" && mutation.targetId) {
++        const updated: Expense = await res.json();
++        setExpenses((prev) => prev.map((e) => (e.id === mutation.targetId ? updated : e)));
++      }
++      show("success", `Synced: ${mutation.label}`);
++    },
++    [show]
++  );
++
++  const { isOnline, pendingCount, enqueue } = useOfflineQueue("expenses", handleApplied);
++
+   // ── CRUD actions ───────────────────────────
+ 
+   /** Add a brand-new expense — saved to MongoDB immediately */
+   const addExpense = useCallback(async (data: ExpenseFormData): Promise<void> => {
++    if (!isOnline) {
++      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
++      const optimistic: Expense = { ...data, id: tempId, createdAt: new Date().toISOString() };
++      setExpenses((prev) => [optimistic, ...prev]);
++      enqueue({
++        method: "POST",
++        url: "/api/expenses",
++        body: data,
++        label: `Add expense: ${data.category} (${data.crop})`,
++        tempId,
++      });
++      show("info", "No connection — saved on this device, will sync once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch("/api/expenses", {
+         method: "POST",
+@@ -93,10 +135,27 @@ export function useExpenses() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not save expense.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   /** Update an existing expense (matched by id) */
+   const updateExpense = useCallback(async (id: string, data: ExpenseFormData): Promise<void> => {
++    if (!isOnline) {
++      if (id.startsWith("offline-")) {
++        updateQueuedCreateBody(id, data);
++        setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
++        return;
++      }
++      setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
++      enqueue({
++        method: "PUT",
++        url: `/api/expenses/${id}`,
++        body: data,
++        label: `Update expense: ${data.category} (${data.crop})`,
++        targetId: id,
++      });
++      show("info", "No connection — saved on this device, will sync once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch(`/api/expenses/${id}`, {
+         method: "PUT",
+@@ -116,10 +175,27 @@ export function useExpenses() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not update expense.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   /** Remove an expense permanently */
+   const deleteExpense = useCallback(async (id: string): Promise<void> => {
++    if (!isOnline) {
++      if (id.startsWith("offline-")) {
++        removeQueuedCreate(id);
++        setExpenses((prev) => prev.filter((e) => e.id !== id));
++        show("info", "Removed (was never synced)");
++        return;
++      }
++      setExpenses((prev) => prev.filter((e) => e.id !== id));
++      enqueue({
++        method: "DELETE",
++        url: `/api/expenses/${id}`,
++        label: "Delete expense record",
++        targetId: id,
++      });
++      show("info", "No connection — will delete once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+       if (!res.ok) {
+@@ -134,7 +210,7 @@ export function useExpenses() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not delete expense.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   // ── Filtering ─────────────────────────────
+ 
+@@ -178,6 +254,8 @@ export function useExpenses() {
+     totalSpend,
+     isLoaded,
+     error,
++    isOnline,
++    pendingCount,
+ 
+     // actions
+     addExpense,
+diff --git a/app/hooks/useIncome.ts b/app/hooks/useIncome.ts
+index 8ac31dc..74d6414 100644
+--- a/app/hooks/useIncome.ts
++++ b/app/hooks/useIncome.ts
+@@ -13,6 +13,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
+ import { Income, IncomeFormData, CropType, PaymentStatus } from "@/app/types";
+ import { grandIncomeTotal, totalAmountDue, getPaymentStatus, buildPaymentStatusSummary } from "@/app/utils/helpers";
+ import { useInformation } from "../components/Information";
++import { useOfflineQueue } from "./useOfflineQueue";
++import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
+ 
+ 
+ export interface IncomeFilters {
+@@ -57,9 +59,56 @@ export function useIncome() {
+     };
+   }, []);
+ 
++  // ── Offline queue ───────────────────────────
++  // Reconciles each queued mutation once it actually reaches the server:
++  //   POST  → swap the temporary offline record for the real MongoDB one
++  //   PUT   → swap in whatever the server sends back (source of truth)
++  //   DELETE → nothing further to do, it's already gone from local state
++  // A mutation the server rejects (4xx) is dropped rather than retried
++  // forever, since retrying bad data won't ever succeed — the farmer is
++  // told so they can redo it with corrected info.
++  const handleApplied = useCallback(
++    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
++      if (err || !res) return; // network still down; stays queued, retried next reconnect
++      if (!res.ok) {
++        const body = await res.json().catch(() => ({}));
++        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
++        if (mutation.method === "POST" && mutation.tempId) {
++          setIncome((prev) => prev.filter((i) => i.id !== mutation.tempId));
++        }
++        return;
++      }
++      if (mutation.method === "POST" && mutation.tempId) {
++        const saved: Income = await res.json();
++        setIncome((prev) => prev.map((i) => (i.id === mutation.tempId ? saved : i)));
++      } else if (mutation.method === "PUT" && mutation.targetId) {
++        const updated: Income = await res.json();
++        setIncome((prev) => prev.map((i) => (i.id === mutation.targetId ? updated : i)));
++      }
++      show("success", `Synced: ${mutation.label}`);
++    },
++    [show]
++  );
++
++  const { isOnline, pendingCount, enqueue } = useOfflineQueue("income", handleApplied);
++
+   // ── CRUD actions ───────────────────────────
+ 
+   const addIncome = useCallback(async (data: IncomeFormData): Promise<void> => {
++    if (!isOnline) {
++      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
++      const optimistic: Income = { ...data, id: tempId, createdAt: new Date().toISOString() };
++      setIncome((prev) => [optimistic, ...prev]);
++      enqueue({
++        method: "POST",
++        url: "/api/income",
++        body: data,
++        label: `Add income: ${data.crop} — ${data.buyer}`,
++        tempId,
++      });
++      show("info", "No connection — saved on this device, will sync once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch("/api/income", {
+         method: "POST",
+@@ -79,9 +128,29 @@ export function useIncome() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not save income.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   const updateIncome = useCallback(async (id: string, data: IncomeFormData): Promise<void> => {
++    if (!isOnline) {
++      // If this record itself hasn't synced yet (still a temp offline id),
++      // there's no server-side record to PUT against — just patch the
++      // still-queued POST in place instead of enqueueing a second mutation.
++      if (id.startsWith("offline-")) {
++        updateQueuedCreateBody(id, data);
++        setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
++        return;
++      }
++      setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
++      enqueue({
++        method: "PUT",
++        url: `/api/income/${id}`,
++        body: data,
++        label: `Update income: ${data.crop} — ${data.buyer}`,
++        targetId: id,
++      });
++      show("info", "No connection — saved on this device, will sync once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch(`/api/income/${id}`, {
+         method: "PUT",
+@@ -101,9 +170,27 @@ export function useIncome() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not update income.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   const deleteIncome = useCallback(async (id: string): Promise<void> => {
++    if (!isOnline) {
++      if (id.startsWith("offline-")) {
++        // Never left the device — just drop the queued create, nothing to sync.
++        removeQueuedCreate(id);
++        setIncome((prev) => prev.filter((i) => i.id !== id));
++        show("info", "Removed (was never synced)");
++        return;
++      }
++      setIncome((prev) => prev.filter((i) => i.id !== id));
++      enqueue({
++        method: "DELETE",
++        url: `/api/income/${id}`,
++        label: "Delete income record",
++        targetId: id,
++      });
++      show("info", "No connection — will delete once you're back online");
++      return;
++    }
+     try {
+       const res = await fetch(`/api/income/${id}`, { method: "DELETE" });
+       if (!res.ok) {
+@@ -118,7 +205,7 @@ export function useIncome() {
+       console.error(err);
+       setError(err instanceof Error ? err.message : "Could not delete income.");
+     }
+-  }, [show]);
++  }, [isOnline, enqueue, show]);
+ 
+   /**
+    * Quick "Record Payment" action — adds `extraPaid` on top of whatever
+@@ -188,6 +275,8 @@ export function useIncome() {
+     statusSummary,
+     isLoaded,
+     error,
++    isOnline,
++    pendingCount,
+ 
+     addIncome,
+     updateIncome,
+diff --git a/app/hooks/useLoans.ts b/app/hooks/useLoans.ts
+index f88dcfc..01a67cc 100644
+--- a/app/hooks/useLoans.ts
++++ b/app/hooks/useLoans.ts
+@@ -11,8 +11,10 @@
+ 
+ import { useState, useEffect, useMemo, useCallback } from "react";
+ import { Loan, LoanFormData, LoanSource, PaymentStatus } from "@/app/types";
+-import { grandLoanTotal, totalLoanDue, getLoanStatus, buildLoanStatusSummary } from "@/app/utils/helpers";
++import { grandLoanTotal, totalLoanDue, getLoanStatus, buildLoanStatusSummary, formatNPR } from "@/app/utils/helpers";
+ import { useInformation } from "../components/Information";
++import { useOfflineQueue } from "./useOfflineQueue";
++import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
+ 
+ export interface LoanFilters {
+   source: LoanSource | "All";
+@@ -56,10 +58,59 @@ export function useLoans() {
+     };
+   }, []);
+ 
++  // ── Offline queue ───────────────────────────
++  const handleApplied = useCallback(
++    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
++      if (err || !res) return; // network still down; stays queued, retried next reconnect
++      if (!res.ok) {
++        const body = await res.json().catch(() => ({}));
++        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
++        if (mutation.method === "POST" && mutation.tempId) {
++          setLoans((prev) => prev.filter((l) => l.id !== mutation.tempId));
++        }
++        return;
++      }
++      if (mutation.method === "POST" && mutation.tempId) {
++        const saved: Loan = await res.json();
++        setLoans((prev) => prev.map((l) => (l.id === mutation.tempId ? saved : l)));
++      } else if (mutation.method === "PUT" && mutation.targetId) {
++        const updated: Loan = await res.json();
++        setLoans((prev) => prev.map((l) => (l.id === mutation.targetId ? updated : l)));
++      } else if (mutation.method === "POST" && mutation.targetId) {
++        // Interest payment — the endpoint returns the whole updated loan.
++        const updated: Loan = await res.json();
++        setLoans((prev) => prev.map((l) => (l.id === mutation.targetId ? updated : l)));
++      }
++      show("success", `Synced: ${mutation.label}`);
++    },
++    [show]
++  );
++
++  const { isOnline, pendingCount, enqueue } = useOfflineQueue("loans", handleApplied);
++
+   // ── CRUD actions ───────────────────────────
+ 
+   const addLoan = useCallback(
+     async (data: LoanFormData): Promise<void> => {
++      if (!isOnline) {
++        const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
++        const optimistic: Loan = {
++          ...data,
++          id: tempId,
++          interestPayments: [],
++          createdAt: new Date().toISOString(),
++        };
++        setLoans((prev) => [optimistic, ...prev]);
++        enqueue({
++          method: "POST",
++          url: "/api/loans",
++          body: data,
++          label: `Add udhaar: ${data.lenderName}`,
++          tempId,
++        });
++        show("info", "No connection — saved on this device, will sync once you're back online");
++        return;
++      }
+       try {
+         const res = await fetch("/api/loans", {
+           method: "POST",
+@@ -80,11 +131,32 @@ export function useLoans() {
+         setError(err instanceof Error ? err.message : "Could not save udhaar.");
+       }
+     },
+-    [show]
++    [isOnline, enqueue, show]
+   );
+ 
+   const updateLoan = useCallback(
+     async (id: string, data: LoanFormData): Promise<void> => {
++      if (!isOnline) {
++        if (id.startsWith("offline-")) {
++          updateQueuedCreateBody(id, data);
++          setLoans((prev) =>
++            prev.map((l) => (l.id === id ? { ...data, id, interestPayments: l.interestPayments, createdAt: l.createdAt } : l))
++          );
++          return;
++        }
++        setLoans((prev) =>
++          prev.map((l) => (l.id === id ? { ...data, id, interestPayments: l.interestPayments, createdAt: l.createdAt } : l))
++        );
++        enqueue({
++          method: "PUT",
++          url: `/api/loans/${id}`,
++          body: data,
++          label: `Update udhaar: ${data.lenderName}`,
++          targetId: id,
++        });
++        show("info", "No connection — saved on this device, will sync once you're back online");
++        return;
++      }
+       try {
+         const res = await fetch(`/api/loans/${id}`, {
+           method: "PUT",
+@@ -105,11 +177,28 @@ export function useLoans() {
+         setError(err instanceof Error ? err.message : "Could not update udhaar.");
+       }
+     },
+-    [show]
++    [isOnline, enqueue, show]
+   );
+ 
+   const deleteLoan = useCallback(
+     async (id: string): Promise<void> => {
++      if (!isOnline) {
++        if (id.startsWith("offline-")) {
++          removeQueuedCreate(id);
++          setLoans((prev) => prev.filter((l) => l.id !== id));
++          show("info", "Removed (was never synced)");
++          return;
++        }
++        setLoans((prev) => prev.filter((l) => l.id !== id));
++        enqueue({
++          method: "DELETE",
++          url: `/api/loans/${id}`,
++          label: "Delete udhaar record",
++          targetId: id,
++        });
++        show("info", "No connection — will delete once you're back online");
++        return;
++      }
+       try {
+         const res = await fetch(`/api/loans/${id}`, { method: "DELETE" });
+         if (!res.ok) {
+@@ -125,7 +214,7 @@ export function useLoans() {
+         setError(err instanceof Error ? err.message : "Could not delete udhaar.");
+       }
+     },
+-    [show]
++    [isOnline, enqueue, show]
+   );
+ 
+   /**
+@@ -166,6 +255,30 @@ export function useLoans() {
+    */
+   const recordInterestPayment = useCallback(
+     async (id: string, date: string, amount: number): Promise<void> => {
++      if (!isOnline) {
++        // A loan that hasn't synced yet has no real server id to attach an
++        // interest payment to, and the create endpoint doesn't accept
++        // interestPayments at creation time — so this one case can't be
++        // queued cleanly. Ask the farmer to redo it once the udhaar itself
++        // has synced, rather than silently losing it or building a chain
++        // of dependent offline mutations for a narrow edge case.
++        if (id.startsWith("offline-")) {
++          show("error", "This udhaar hasn't synced yet — record the interest payment again once you're back online.");
++          return;
++        }
++        setLoans((prev) =>
++          prev.map((l) => (l.id === id ? { ...l, interestPayments: [...l.interestPayments, { date, amount }] } : l))
++        );
++        enqueue({
++          method: "POST",
++          url: `/api/loans/${id}/interest`,
++          body: { date, amount },
++          label: `Interest payment: ${formatNPR(amount)}`,
++          targetId: id,
++        });
++        show("info", "No connection — saved on this device, will sync once you're back online");
++        return;
++      }
+       try {
+         const res = await fetch(`/api/loans/${id}/interest`, {
+           method: "POST",
+@@ -186,7 +299,7 @@ export function useLoans() {
+         setError(err instanceof Error ? err.message : "Could not record interest payment.");
+       }
+     },
+-    [show]
++    [isOnline, enqueue, show]
+   );
+ 
+   // ── Filtering ─────────────────────────────
+@@ -227,6 +340,8 @@ export function useLoans() {
+     statusSummary,
+     isLoaded,
+     error,
++    isOnline,
++    pendingCount,
+ 
+     addLoan,
+     updateLoan,
+diff --git a/app/hooks/useOfflineQueue.ts b/app/hooks/useOfflineQueue.ts
+new file mode 100644
+index 0000000..f535880
+--- /dev/null
++++ b/app/hooks/useOfflineQueue.ts
+@@ -0,0 +1,91 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – useOfflineQueue
++//
++//  One instance per resource ("income", "expenses", "loans",
++//  "budgets", "crops"). Used INSIDE the resource's own data hook
++//  (useIncome, useExpenses, ...) — not called directly by pages.
++//
++//  Give it an `onApplied` callback and it will, whenever the
++//  device is online, replay that resource's queued mutations in
++//  order and call `onApplied` for each one so the calling hook can
++//  reconcile its own local state (e.g. swap a temporary offline-
++//  created record for the real one MongoDB returned).
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect, useCallback, useRef } from "react";
++import { useOnlineStatus } from "./useOnlineStatus";
++import {
++  QueuedMutation,
++  enqueueMutation,
++  dequeueMutation,
++  getQueueForResource,
++  subscribeToQueueChanges,
++} from "@/lib/offlineQueue";
++
++type OnApplied = (
++  mutation: QueuedMutation,
++  response: Response | null,
++  err: unknown
++) => void | Promise<void>;
++
++export function useOfflineQueue(resource: string, onApplied: OnApplied) {
++  const isOnline = useOnlineStatus();
++  const [pending, setPending] = useState<QueuedMutation[]>(() => getQueueForResource(resource));
++  const isSyncingRef = useRef(false);
++
++  // Kept in a ref so processPending always calls the latest reconciliation
++  // logic without needing `onApplied` in its own dependency array (the
++  // calling hook would otherwise recreate it on every render). Synced via
++  // an effect rather than during render itself, since mutating a ref's
++  // .current mid-render isn't safe.
++  const onAppliedRef = useRef(onApplied);
++  useEffect(() => {
++    onAppliedRef.current = onApplied;
++  });
++
++  useEffect(() => {
++    return subscribeToQueueChanges(() => setPending(getQueueForResource(resource)));
++  }, [resource]);
++
++  const enqueue = useCallback(
++    (input: Omit<QueuedMutation, "id" | "createdAt" | "resource">) =>
++      enqueueMutation({ ...input, resource }),
++    [resource]
++  );
++
++  const processPending = useCallback(async () => {
++    if (isSyncingRef.current) return;
++    isSyncingRef.current = true;
++    try {
++      for (const mutation of getQueueForResource(resource)) {
++        try {
++          const res = await fetch(mutation.url, {
++            method: mutation.method,
++            headers: mutation.body ? { "Content-Type": "application/json" } : undefined,
++            body: mutation.body ? JSON.stringify(mutation.body) : undefined,
++          });
++          await onAppliedRef.current(mutation, res, null);
++          dequeueMutation(mutation.id);
++        } catch (err) {
++          // Still offline (or the connection just flapped) — stop here so
++          // later mutations aren't applied out of order. Everything from
++          // this point stays queued and retries on the next reconnect.
++          await onAppliedRef.current(mutation, null, err);
++          break;
++        }
++      }
++    } finally {
++      isSyncingRef.current = false;
++    }
++  }, [resource]);
++
++  // Flush on mount (covers "left some things queued, reopened the app
++  // already online") and every time we transition to online.
++  useEffect(() => {
++    if (isOnline) processPending();
++  }, [isOnline, processPending]);
++
++  return { isOnline, pending, pendingCount: pending.length, enqueue, processPending };
++}
+diff --git a/app/hooks/useOfflineQueueSummary.ts b/app/hooks/useOfflineQueueSummary.ts
+new file mode 100644
+index 0000000..f38a478
+--- /dev/null
++++ b/app/hooks/useOfflineQueueSummary.ts
+@@ -0,0 +1,28 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – useOfflineQueueSummary
++//
++//  Unlike useOfflineQueue (one per resource, lives inside
++//  useIncome/useExpenses/etc.), this gives a whole-app view:
++//  "are we online, and how many changes are waiting to sync
++//  in total, across every resource?" Used by the TopBar banner,
++//  which is mounted on every page regardless of which data
++//  hooks that page happens to use.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect } from "react";
++import { useOnlineStatus } from "./useOnlineStatus";
++import { getTotalPendingCount, subscribeToQueueChanges } from "@/lib/offlineQueue";
++
++export function useOfflineQueueSummary() {
++  const isOnline = useOnlineStatus();
++  const [pendingCount, setPendingCount] = useState(0);
++
++  useEffect(() => {
++    queueMicrotask(() => setPendingCount(getTotalPendingCount()));
++    return subscribeToQueueChanges(() => setPendingCount(getTotalPendingCount()));
++  }, []);
++
++  return { isOnline, pendingCount };
++}
+diff --git a/app/hooks/useOnlineStatus.ts b/app/hooks/useOnlineStatus.ts
+new file mode 100644
+index 0000000..d72e03e
+--- /dev/null
++++ b/app/hooks/useOnlineStatus.ts
+@@ -0,0 +1,35 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – useOnlineStatus
++//  Tracks connectivity so data hooks know when to
++//  queue a mutation instead of sending it straight
++//  to the server, and when to flush that queue.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect } from "react";
++
++export function useOnlineStatus(): boolean {
++  // Assume online until proven otherwise — avoids a flash of "offline" UI
++  // on first render, and navigator isn't available during SSR anyway.
++  const [isOnline, setIsOnline] = useState(true);
++
++  useEffect(() => {
++    // Deferred via queueMicrotask rather than called synchronously — this
++    // is the same "external system → React state" read as localStorage
++    // or matchMedia elsewhere in the app; deferring it avoids a
++    // synchronous setState-in-effect on mount while still resolving
++    // before the next paint.
++    queueMicrotask(() => setIsOnline(navigator.onLine));
++    const goOnline = () => setIsOnline(true);
++    const goOffline = () => setIsOnline(false);
++    window.addEventListener("online", goOnline);
++    window.addEventListener("offline", goOffline);
++    return () => {
++      window.removeEventListener("online", goOnline);
++      window.removeEventListener("offline", goOffline);
++    };
++  }, []);
++
++  return isOnline;
++}
+diff --git a/lib/offlineQueue.ts b/lib/offlineQueue.ts
+new file mode 100644
+index 0000000..f188da0
+--- /dev/null
++++ b/lib/offlineQueue.ts
+@@ -0,0 +1,115 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Offline mutation queue
++//
++//  When a farmer adds/edits/deletes something with no signal,
++//  the request can't reach MongoDB. Instead of failing outright,
++//  each data hook (useIncome, useExpenses, useLoans, useBudgets,
++//  useCrops) applies the change to its own in-memory state right
++//  away and drops the underlying HTTP request in here. Once the
++//  device reconnects, useOfflineQueue() replays every queued
++//  request, in the order it was made, against the real API.
++//
++//  Deliberately generic: this module knows nothing about Income,
++//  Expense, or Loan shapes — it just remembers "do this HTTP
++//  request later" entries. Each resource hook is responsible for
++//  its own optimistic local state and for reconciling it once a
++//  queued request actually succeeds (see useIncome.ts for the
++//  reference implementation).
++// ─────────────────────────────────────────────
++
++export type QueuedMethod = "POST" | "PUT" | "DELETE";
++
++export interface QueuedMutation {
++  id: string;               // this queue entry's own id (not the record's id)
++  resource: string;         // "income" | "expenses" | "loans" | "budgets" | "crops"
++  method: QueuedMethod;
++  url: string;
++  body?: unknown;
++  label: string;            // shown in the pending-sync UI, e.g. "Add income: Tomato — Ram"
++  tempId?: string;          // for POST: the temporary client-side id given to the optimistic record
++  targetId?: string;        // for PUT/DELETE: the real record id being changed
++  createdAt: number;
++}
++
++const STORAGE_KEY = "khetibahi:offline-queue";
++const CHANGE_EVENT = "khetibahi:offline-queue-changed";
++
++function isBrowser(): boolean {
++  return typeof window !== "undefined";
++}
++
++export function readQueue(): QueuedMutation[] {
++  if (!isBrowser()) return [];
++  try {
++    const raw = window.localStorage.getItem(STORAGE_KEY);
++    return raw ? (JSON.parse(raw) as QueuedMutation[]) : [];
++  } catch (err) {
++    console.error("Could not read offline queue:", err);
++    return [];
++  }
++}
++
++function writeQueue(queue: QueuedMutation[]): void {
++  if (!isBrowser()) return;
++  try {
++    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
++  } catch (err) {
++    console.error("Could not write offline queue:", err);
++  }
++  // Same-tab listeners don't get the browser's native "storage" event
++  // (that only fires in OTHER tabs), so broadcast our own for useOfflineQueue
++  // instances in this tab to pick up.
++  window.dispatchEvent(new Event(CHANGE_EVENT));
++}
++
++export function getQueueForResource(resource: string): QueuedMutation[] {
++  return readQueue()
++    .filter((m) => m.resource === resource)
++    .sort((a, b) => a.createdAt - b.createdAt);
++}
++
++export function getTotalPendingCount(): number {
++  return readQueue().length;
++}
++
++export function enqueueMutation(input: Omit<QueuedMutation, "id" | "createdAt">): QueuedMutation {
++  const mutation: QueuedMutation = {
++    ...input,
++    id: `queue-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
++    createdAt: Date.now(),
++  };
++  writeQueue([...readQueue(), mutation]);
++  return mutation;
++}
++
++export function dequeueMutation(id: string): void {
++  writeQueue(readQueue().filter((m) => m.id !== id));
++}
++
++/**
++ * A record that was created offline and hasn't synced yet has no real
++ * server id — editing or deleting it before it syncs shouldn't queue a
++ * separate PUT/DELETE against an id the server has never seen. Instead,
++ * mutate (or drop) the still-queued POST directly.
++ */
++export function updateQueuedCreateBody(tempId: string, body: unknown): void {
++  writeQueue(readQueue().map((m) => (m.tempId === tempId ? { ...m, body } : m)));
++}
++
++export function removeQueuedCreate(tempId: string): void {
++  writeQueue(readQueue().filter((m) => m.tempId !== tempId));
++}
++
++/** Fires whenever the queue changes, in this tab or another. Returns an unsubscribe function. */
++export function subscribeToQueueChanges(listener: () => void): () => void {
++  if (!isBrowser()) return () => {};
++  const handleStorage = (e: StorageEvent) => {
++    if (e.key === STORAGE_KEY) listener();
++  };
++  window.addEventListener(CHANGE_EVENT, listener);
++  window.addEventListener("storage", handleStorage);
++  return () => {
++    window.removeEventListener(CHANGE_EVENT, listener);
++    window.removeEventListener("storage", handleStorage);
++  };
++}

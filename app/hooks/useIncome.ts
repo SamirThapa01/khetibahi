@@ -13,6 +13,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { Income, IncomeFormData, CropType, PaymentStatus } from "@/app/types";
 import { grandIncomeTotal, totalAmountDue, getPaymentStatus, buildPaymentStatusSummary } from "@/app/utils/helpers";
 import { useInformation } from "../components/Information";
+import { useOfflineQueue } from "./useOfflineQueue";
+import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
 
 
 export interface IncomeFilters {
@@ -57,9 +59,56 @@ export function useIncome() {
     };
   }, []);
 
+  // ── Offline queue ───────────────────────────
+  // Reconciles each queued mutation once it actually reaches the server:
+  //   POST  → swap the temporary offline record for the real MongoDB one
+  //   PUT   → swap in whatever the server sends back (source of truth)
+  //   DELETE → nothing further to do, it's already gone from local state
+  // A mutation the server rejects (4xx) is dropped rather than retried
+  // forever, since retrying bad data won't ever succeed — the farmer is
+  // told so they can redo it with corrected info.
+  const handleApplied = useCallback(
+    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
+      if (err || !res) return; // network still down; stays queued, retried next reconnect
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
+        if (mutation.method === "POST" && mutation.tempId) {
+          setIncome((prev) => prev.filter((i) => i.id !== mutation.tempId));
+        }
+        return;
+      }
+      if (mutation.method === "POST" && mutation.tempId) {
+        const saved: Income = await res.json();
+        setIncome((prev) => prev.map((i) => (i.id === mutation.tempId ? saved : i)));
+      } else if (mutation.method === "PUT" && mutation.targetId) {
+        const updated: Income = await res.json();
+        setIncome((prev) => prev.map((i) => (i.id === mutation.targetId ? updated : i)));
+      }
+      show("success", `Synced: ${mutation.label}`);
+    },
+    [show]
+  );
+
+  const { isOnline, pendingCount, enqueue } = useOfflineQueue("income", handleApplied);
+
   // ── CRUD actions ───────────────────────────
 
   const addIncome = useCallback(async (data: IncomeFormData): Promise<void> => {
+    if (!isOnline) {
+      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const optimistic: Income = { ...data, id: tempId, createdAt: new Date().toISOString() };
+      setIncome((prev) => [optimistic, ...prev]);
+      enqueue({
+        method: "POST",
+        url: "/api/income",
+        body: data,
+        label: `Add income: ${data.crop} — ${data.buyer}`,
+        tempId,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch("/api/income", {
         method: "POST",
@@ -79,9 +128,29 @@ export function useIncome() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save income.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   const updateIncome = useCallback(async (id: string, data: IncomeFormData): Promise<void> => {
+    if (!isOnline) {
+      // If this record itself hasn't synced yet (still a temp offline id),
+      // there's no server-side record to PUT against — just patch the
+      // still-queued POST in place instead of enqueueing a second mutation.
+      if (id.startsWith("offline-")) {
+        updateQueuedCreateBody(id, data);
+        setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
+        return;
+      }
+      setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
+      enqueue({
+        method: "PUT",
+        url: `/api/income/${id}`,
+        body: data,
+        label: `Update income: ${data.crop} — ${data.buyer}`,
+        targetId: id,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/income/${id}`, {
         method: "PUT",
@@ -101,9 +170,27 @@ export function useIncome() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update income.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   const deleteIncome = useCallback(async (id: string): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        // Never left the device — just drop the queued create, nothing to sync.
+        removeQueuedCreate(id);
+        setIncome((prev) => prev.filter((i) => i.id !== id));
+        show("info", "Removed (was never synced)");
+        return;
+      }
+      setIncome((prev) => prev.filter((i) => i.id !== id));
+      enqueue({
+        method: "DELETE",
+        url: `/api/income/${id}`,
+        label: "Delete income record",
+        targetId: id,
+      });
+      show("info", "No connection — will delete once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/income/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -118,7 +205,7 @@ export function useIncome() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete income.");
     }
-  }, [show]);
+  }, [isOnline, enqueue, show]);
 
   /**
    * Quick "Record Payment" action — adds `extraPaid` on top of whatever
@@ -188,6 +275,8 @@ export function useIncome() {
     statusSummary,
     isLoaded,
     error,
+    isOnline,
+    pendingCount,
 
     addIncome,
     updateIncome,
