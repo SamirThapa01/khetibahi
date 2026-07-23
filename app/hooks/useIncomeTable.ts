@@ -6,6 +6,13 @@
 //  Analytics still need the FULL sales history via useIncome(), so
 //  this pagination logic lives in its own hook instead of changing
 //  what everyone else depends on.
+//
+//  Offline queue: reconciliation here just refetches the current page
+//  + summary once a queued mutation actually reaches the server,
+//  rather than trying to splice a temp record into an arbitrary page
+//  (a new record always belongs on page 1 of the default sort, an
+//  edited/deleted one could be on any page depending on filters) —
+//  same "just refetch, trust the server" approach useBudgets.ts uses.
 // ─────────────────────────────────────────────
 
 "use client";
@@ -14,6 +21,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Income, IncomeFormData, PaymentStatusSummary } from "@/app/types";
 import { useInformation } from "../components/Information";
 import type { IncomeFilters } from "./useIncome"; // same shape IncomeFilterBar already expects
+import { useOfflineQueue } from "./useOfflineQueue";
+import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
 
 const PAGE_SIZE = 10;
 
@@ -127,7 +136,49 @@ export function useIncomeTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, effectiveFilters.crop, effectiveFilters.month, effectiveFilters.search, effectiveFilters.status]);
 
+  // ── Offline queue ───────────────────────────
+  // Once a queued mutation actually reaches the server, refetch this page
+  // + the summary rather than trying to reconcile one record in place —
+  // simplest correct thing for a paginated view (see file header).
+  const handleApplied = useCallback(
+    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
+      if (err || !res) return; // network still down; stays queued, retried next reconnect
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
+        await Promise.all([refetchPage(), fetchSummary()]);
+        return;
+      }
+      show("success", `Synced: ${mutation.label}`);
+      await Promise.all([refetchPage(), fetchSummary()]);
+    },
+    [show, refetchPage, fetchSummary]
+  );
+
+  const { isOnline, pendingCount, enqueue } = useOfflineQueue("income", handleApplied);
+
   const addIncome = useCallback(async (data: IncomeFormData): Promise<void> => {
+    if (!isOnline) {
+      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const optimistic: Income = { ...data, id: tempId, createdAt: new Date().toISOString() };
+      // A new record always sorts newest-first onto page 1 — only show it
+      // immediately if that's the page currently on screen, so we never
+      // inject a row into the middle of some other page's real results.
+      if (page === 1) {
+        setIncome((prev) => [optimistic, ...prev].slice(0, PAGE_SIZE));
+        setTotal((t) => t + 1);
+        setFilteredTotal((t) => t + 1);
+      }
+      enqueue({
+        method: "POST",
+        url: "/api/income",
+        body: data,
+        label: `Add income: ${data.crop} — ${data.buyer}`,
+        tempId,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch("/api/income", {
         method: "POST",
@@ -147,9 +198,29 @@ export function useIncomeTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save income.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, page, show, refetchPage, fetchSummary]);
 
   const updateIncome = useCallback(async (id: string, data: IncomeFormData): Promise<void> => {
+    if (!isOnline) {
+      // If this record itself hasn't synced yet (still a temp offline id),
+      // there's no server-side record to PUT against — just patch the
+      // still-queued POST in place instead of enqueueing a second mutation.
+      if (id.startsWith("offline-")) {
+        updateQueuedCreateBody(id, data);
+        setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
+        return;
+      }
+      setIncome((prev) => prev.map((i) => (i.id === id ? { ...data, id, createdAt: i.createdAt } : i)));
+      enqueue({
+        method: "PUT",
+        url: `/api/income/${id}`,
+        body: data,
+        label: `Update income: ${data.crop} — ${data.buyer}`,
+        targetId: id,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/income/${id}`, {
         method: "PUT",
@@ -168,9 +239,27 @@ export function useIncomeTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update income.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, show, refetchPage, fetchSummary]);
 
   const deleteIncome = useCallback(async (id: string): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        // Never left the device — just drop the queued create, nothing to sync.
+        removeQueuedCreate(id);
+        setIncome((prev) => prev.filter((i) => i.id !== id));
+        show("info", "Removed (was never synced)");
+        return;
+      }
+      setIncome((prev) => prev.filter((i) => i.id !== id));
+      enqueue({
+        method: "DELETE",
+        url: `/api/income/${id}`,
+        label: "Delete income record",
+        targetId: id,
+      });
+      show("info", "No connection — will delete once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/income/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -185,7 +274,7 @@ export function useIncomeTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete income.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, show, refetchPage, fetchSummary]);
 
   /**
    * Quick "Record Payment" action. Needs the full record to compute the
@@ -236,6 +325,8 @@ export function useIncomeTable() {
     statusSummary,
     isLoaded,
     error,
+    isOnline,
+    pendingCount,
 
     page,
     setPage,

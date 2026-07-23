@@ -16,6 +16,11 @@
 //      you're viewing — not derived from the 10 rows in memory)
 //    • sends every add/edit/delete straight to the server, then
 //      refreshes both the current page and the summary
+//
+//  Offline queue: reconciliation here just refetches the current page
+//  + summary once a queued mutation actually reaches the server,
+//  rather than trying to splice a temp record into an arbitrary page —
+//  same "just refetch, trust the server" approach useBudgets.ts uses.
 // ─────────────────────────────────────────────
 
 "use client";
@@ -25,6 +30,8 @@ import { Expense, ExpenseFormData, CategorySummary } from "@/app/types";
 import { buildCategorySummariesFromTotals } from "@/app/utils/helpers";
 import { useInformation } from "../components/Information";
 import type { ExpenseFilters } from "./useExpenses"; // same shape FilterBar already expects
+import { useOfflineQueue } from "./useOfflineQueue";
+import { QueuedMutation, updateQueuedCreateBody, removeQueuedCreate } from "@/lib/offlineQueue";
 
 const PAGE_SIZE = 10;
 
@@ -139,7 +146,43 @@ export function useExpensesTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, effectiveFilters.category, effectiveFilters.crop, effectiveFilters.month, effectiveFilters.search]);
 
+  // ── Offline queue ───────────────────────────
+  const handleApplied = useCallback(
+    async (mutation: QueuedMutation, res: Response | null, err: unknown) => {
+      if (err || !res) return; // network still down; stays queued, retried next reconnect
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", `Could not sync "${mutation.label}": ${body.error ?? "server rejected it"}`);
+        await Promise.all([refetchPage(), fetchSummary()]);
+        return;
+      }
+      show("success", `Synced: ${mutation.label}`);
+      await Promise.all([refetchPage(), fetchSummary()]);
+    },
+    [show, refetchPage, fetchSummary]
+  );
+
+  const { isOnline, pendingCount, enqueue } = useOfflineQueue("expenses", handleApplied);
+
   const addExpense = useCallback(async (data: ExpenseFormData): Promise<void> => {
+    if (!isOnline) {
+      const tempId = `offline-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const optimistic: Expense = { ...data, id: tempId, createdAt: new Date().toISOString() };
+      if (page === 1) {
+        setExpenses((prev) => [optimistic, ...prev].slice(0, PAGE_SIZE));
+        setTotal((t) => t + 1);
+        setFilteredTotal((t) => t + 1);
+      }
+      enqueue({
+        method: "POST",
+        url: "/api/expenses",
+        body: data,
+        label: `Add expense: ${data.category} (${data.crop})`,
+        tempId,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch("/api/expenses", {
         method: "POST",
@@ -159,9 +202,26 @@ export function useExpensesTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not save expense.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, page, show, refetchPage, fetchSummary]);
 
   const updateExpense = useCallback(async (id: string, data: ExpenseFormData): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        updateQueuedCreateBody(id, data);
+        setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
+        return;
+      }
+      setExpenses((prev) => prev.map((e) => (e.id === id ? { ...data, id, createdAt: e.createdAt } : e)));
+      enqueue({
+        method: "PUT",
+        url: `/api/expenses/${id}`,
+        body: data,
+        label: `Update expense: ${data.category} (${data.crop})`,
+        targetId: id,
+      });
+      show("info", "No connection — saved on this device, will sync once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/expenses/${id}`, {
         method: "PUT",
@@ -180,9 +240,26 @@ export function useExpensesTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not update expense.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, show, refetchPage, fetchSummary]);
 
   const deleteExpense = useCallback(async (id: string): Promise<void> => {
+    if (!isOnline) {
+      if (id.startsWith("offline-")) {
+        removeQueuedCreate(id);
+        setExpenses((prev) => prev.filter((e) => e.id !== id));
+        show("info", "Removed (was never synced)");
+        return;
+      }
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+      enqueue({
+        method: "DELETE",
+        url: `/api/expenses/${id}`,
+        label: "Delete expense record",
+        targetId: id,
+      });
+      show("info", "No connection — will delete once you're back online");
+      return;
+    }
     try {
       const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
       if (!res.ok) {
@@ -197,7 +274,7 @@ export function useExpensesTable() {
       console.error(err);
       setError(err instanceof Error ? err.message : "Could not delete expense.");
     }
-  }, [show, refetchPage, fetchSummary]);
+  }, [isOnline, enqueue, show, refetchPage, fetchSummary]);
 
   /** Every matching row in one request — used only for CSV export, never for the table */
   const fetchAllForExport = useCallback(async (): Promise<Expense[]> => {
@@ -222,6 +299,8 @@ export function useExpensesTable() {
     totalSpend,
     isLoaded,
     error,
+    isOnline,
+    pendingCount,
 
     page,
     setPage,

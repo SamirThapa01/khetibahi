@@ -92,7 +92,13 @@ export function useBudgets(expenses: Expense[]) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category, crop, month, amount }),
       });
-      if (!res.ok) throw new Error("Failed to save budget");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not save budget");
+        throw new Error(body.error ?? "Failed to save budget");
+      }
+      setError(null);
+      show("success", "Budget saved");
       await fetchBudgets();
     },
     [isOnline, enqueue, show, fetchBudgets]
@@ -118,7 +124,13 @@ export function useBudgets(expenses: Expense[]) {
         return;
       }
       const res = await fetch(`/api/budgets/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete budget");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        show("error", body.error ?? "Could not delete budget");
+        throw new Error(body.error ?? "Failed to delete budget");
+      }
+      setError(null);
+      show("success", "Budget deleted");
       setBudgets((prev) => prev.filter((b) => b._id !== id));
     },
     [isOnline, enqueue, show]
