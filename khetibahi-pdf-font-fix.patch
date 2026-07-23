@@ -1,0 +1,102 @@
+diff --git a/app/utils/pdfExport.ts b/app/utils/pdfExport.ts
+index 0577e50..72bb5ee 100644
+--- a/app/utils/pdfExport.ts
++++ b/app/utils/pdfExport.ts
+@@ -16,7 +16,7 @@
+ 
+ import { jsPDF } from "jspdf";
+ import { autoTable } from "jspdf-autotable";
+-import { formatNPR, prettyDate } from "./helpers";
++import { prettyDate } from "./helpers";
+ 
+ export interface BuyerHistoryRecord {
+   id: string;
+@@ -38,6 +38,20 @@ export interface BuyerHistorySummary {
+   count: number;
+ }
+ 
++// helpers.ts's formatNPR() uses Intl.NumberFormat("ne-NP", ...), which
++// renders the Devanagari currency mark (रू) — jsPDF's built-in fonts
++// (Helvetica/Times/Courier) only cover Latin/WinAnsi characters, so that
++// glyph comes out as a garbled box wherever the PDF viewer doesn't do its
++// own font substitution. Desktop viewers often paper over this; strict
++// mobile viewers (Google PDF viewer, iOS Preview) don't. Rather than
++// embed a whole Devanagari-capable font just for a currency mark, the
++// PDF uses a plain "Rs." prefix instead — same grouping/rounding as
++// formatNPR, just ASCII-safe.
++function formatNPRForPDF(amount: number): string {
++  const rounded = Math.round(amount);
++  return `Rs. ${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(rounded)}`;
++}
++
+ // jspdf-autotable attaches lastAutoTable to the doc instance at runtime;
+ // it isn't in jsPDF's own TS types, so this narrow cast is expected/safe.
+ function lastTableEndY(doc: jsPDF): number {
+@@ -87,10 +101,10 @@ export function exportBuyerHistoryToPDF(
+       prettyDate(r.date),
+       r.crop,
+       r.quantityKg.toString(),
+-      formatNPR(r.ratePerKg),
+-      formatNPR(r.amount),
+-      formatNPR(r.amountPaid),
+-      formatNPR(Math.max(r.amount - r.amountPaid, 0)),
++      formatNPRForPDF(r.ratePerKg),
++      formatNPRForPDF(r.amount),
++      formatNPRForPDF(r.amountPaid),
++      formatNPRForPDF(Math.max(r.amount - r.amountPaid, 0)),
+       r.note || "—",
+     ]),
+     styles: { fontSize: 8, cellPadding: 2.5 },
+@@ -105,9 +119,9 @@ export function exportBuyerHistoryToPDF(
+   doc.setFont("helvetica", "normal");
+   doc.text(`Total sales: ${summary.count}`, 14, finalY + 16);
+   doc.text(`Total kg sold: ${summary.totalKg} kg`, 14, finalY + 22);
+-  doc.text(`Total amount: ${formatNPR(summary.totalAmount)}`, 14, finalY + 28);
+-  doc.text(`Total paid: ${formatNPR(summary.totalPaid)}`, 14, finalY + 34);
+-  doc.text(`Total still due: ${formatNPR(summary.totalDue)}`, 14, finalY + 40);
++  doc.text(`Total amount: ${formatNPRForPDF(summary.totalAmount)}`, 14, finalY + 28);
++  doc.text(`Total paid: ${formatNPRForPDF(summary.totalPaid)}`, 14, finalY + 34);
++  doc.text(`Total still due: ${formatNPRForPDF(summary.totalDue)}`, 14, finalY + 40);
+ 
+   doc.save(`buyer-history-${safeSlug(buyer)}-${safeSlug(stripEmoji(cropLabel))}.pdf`);
+ }
+@@ -174,11 +188,11 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
+       b.buyer,
+       b.count.toString(),
+       b.totalKg.toString(),
+-      formatNPR(b.totalAmount),
+-      formatNPR(b.totalPaid),
+-      formatNPR(b.totalDue),
++      formatNPRForPDF(b.totalAmount),
++      formatNPRForPDF(b.totalPaid),
++      formatNPRForPDF(b.totalDue),
+     ]),
+-    foot: [["Total", records.length.toString(), "", formatNPR(grandAmount), formatNPR(grandPaid), formatNPR(grandDue)]],
++    foot: [["Total", records.length.toString(), "", formatNPRForPDF(grandAmount), formatNPRForPDF(grandPaid), formatNPRForPDF(grandDue)]],
+     styles: { fontSize: 9, cellPadding: 3 },
+     headStyles: { fillColor: [46, 125, 50], textColor: 255 },
+     footStyles: { fillColor: [240, 240, 240], textColor: 20, fontStyle: "bold" },
+@@ -201,7 +215,7 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
+     doc.setFontSize(9);
+     doc.setFont("helvetica", "normal");
+     doc.text(
+-      `${b.count} sale${b.count === 1 ? "" : "s"} · ${b.totalKg}kg · ${formatNPR(b.totalAmount)} (${formatNPR(b.totalDue)} due)`,
++      `${b.count} sale${b.count === 1 ? "" : "s"} · ${b.totalKg}kg · ${formatNPRForPDF(b.totalAmount)} (${formatNPRForPDF(b.totalDue)} due)`,
+       14,
+       cursorY + 5
+     );
+@@ -212,10 +226,10 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
+       body: b.rows.map((r) => [
+         prettyDate(r.date),
+         r.quantityKg.toString(),
+-        formatNPR(r.ratePerKg),
+-        formatNPR(r.amount),
+-        formatNPR(r.amountPaid),
+-        formatNPR(Math.max(r.amount - r.amountPaid, 0)),
++        formatNPRForPDF(r.ratePerKg),
++        formatNPRForPDF(r.amount),
++        formatNPRForPDF(r.amountPaid),
++        formatNPRForPDF(Math.max(r.amount - r.amountPaid, 0)),
+         r.note || "—",
+       ]),
+       styles: { fontSize: 8, cellPadding: 2 },
