@@ -1,0 +1,241 @@
+diff --git a/.gitignore b/.gitignore
+index 0ebccc9..01666c3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -35,4 +35,9 @@ yarn-error.log*
+ 
+ # IDE
+ .vscode/
+-.idea/
+\ No newline at end of file
++.idea/
++
++# Serwist — generated at build time from app/sw.ts, don't commit the output
++public/sw.js
++public/sw.js.map
++public/swe-worker-*.js
+\ No newline at end of file
+diff --git a/app/components/ServiceWorkerRegister.tsx b/app/components/ServiceWorkerRegister.tsx
+new file mode 100644
+index 0000000..63bb86d
+--- /dev/null
++++ b/app/components/ServiceWorkerRegister.tsx
+@@ -0,0 +1,25 @@
++"use client";
++
++// ─────────────────────────────────────────────
++//  KhetiBahi – ServiceWorkerRegister
++//
++//  Renders nothing — just registers public/sw.js (built by Serwist
++//  from app/sw.ts) once the app loads. Mounted once in the root
++//  layout. No-ops harmlessly in dev, where the service worker build
++//  is disabled (see next.config.ts).
++// ─────────────────────────────────────────────
++
++import { useEffect } from "react";
++
++export default function ServiceWorkerRegister() {
++  useEffect(() => {
++    if (!("serviceWorker" in navigator)) return;
++    if (process.env.NODE_ENV !== "production") return;
++
++    navigator.serviceWorker.register("/sw.js").catch((err) => {
++      console.error("Service worker registration failed:", err);
++    });
++  }, []);
++
++  return null;
++}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index c5ad423..6a2c1cb 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -1,9 +1,10 @@
+-import type { Metadata } from "next";
++import type { Metadata, Viewport } from "next";
+ import { Plus_Jakarta_Sans, Inter } from "next/font/google";
+ import "./globals.css";
+ import { AuthProvider } from "./context/AuthContext";
+ import LayoutShell from "./components/LayoutShell";
+ import { InformationProvider } from "./components/Information";
++import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
+ InformationProvider
+ 
+ // Display face — confident geometric sans for headings & numbers
+@@ -24,6 +25,25 @@ export const metadata: Metadata = {
+   title: "KhetiBahi — Farm Expense Tracker",
+   description:
+     "Track pesticide, fertilizer, seed, labor, and transport costs for your farm.",
++  // app/manifest.ts already generates /manifest.webmanifest and Next.js
++  // auto-links it — appleWebApp + icons below cover what iOS Safari
++  // still needs its own way (it ignores the manifest for install icons).
++  appleWebApp: {
++    capable: true,
++    statusBarStyle: "default",
++    title: "KhetiBahi",
++  },
++  icons: {
++    icon: [
++      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
++      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
++    ],
++    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
++  },
++};
++
++export const viewport: Viewport = {
++  themeColor: "#1f6b45",
+ };
+ 
+ export default function RootLayout({
+@@ -37,6 +57,7 @@ export default function RootLayout({
+       className={`${heading.variable} ${body.variable}`}
+     >
+       <body className="font-sans antialiased bg-canvas text-ink">
++        <ServiceWorkerRegister />
+         <InformationProvider>
+           <AuthProvider>
+             {/*
+diff --git a/app/manifest.ts b/app/manifest.ts
+new file mode 100644
+index 0000000..438b999
+--- /dev/null
++++ b/app/manifest.ts
+@@ -0,0 +1,37 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Web App Manifest
++//
++//  Next.js's built-in manifest route (app/manifest.ts) generates
++//  /manifest.webmanifest automatically — no hand-written JSON file
++//  to keep in sync. This is what makes Chrome/Android offer
++//  "Install app" and gives the installed app its icon, name, and
++//  standalone (no browser chrome) window.
++// ─────────────────────────────────────────────
++
++import type { MetadataRoute } from "next";
++
++export default function manifest(): MetadataRoute.Manifest {
++  return {
++    name: "KhetiBahi — Farm Ledger",
++    short_name: "KhetiBahi",
++    description:
++      "Track income, expenses, udhaar, and buyer history for your farm — works offline in the field.",
++    start_url: "/",
++    display: "standalone",
++    background_color: "#f7f8f4",
++    theme_color: "#1f6b45",
++    orientation: "portrait-primary",
++    icons: [
++      { src: "/icons/icon-72.png", sizes: "72x72", type: "image/png" },
++      { src: "/icons/icon-96.png", sizes: "96x96", type: "image/png" },
++      { src: "/icons/icon-128.png", sizes: "128x128", type: "image/png" },
++      { src: "/icons/icon-144.png", sizes: "144x144", type: "image/png" },
++      { src: "/icons/icon-152.png", sizes: "152x152", type: "image/png" },
++      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
++      { src: "/icons/icon-384.png", sizes: "384x384", type: "image/png" },
++      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
++      { src: "/icons/maskable-icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
++      { src: "/icons/maskable-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
++    ],
++  };
++}
+diff --git a/app/sw.ts b/app/sw.ts
+new file mode 100644
+index 0000000..5701cdc
+--- /dev/null
++++ b/app/sw.ts
+@@ -0,0 +1,40 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Service worker (compiled by Serwist → public/sw.js)
++//
++//  Two DIFFERENT kinds of "offline" work together in this app:
++//    1. DATA offline (lib/offlineQueue.ts) — queues add/edit/delete
++//       requests in localStorage and replays them on reconnect.
++//    2. APP SHELL offline (this file) — caches the actual JS/CSS/HTML
++//       so the app can even OPEN with zero connection, not just keep
++//       working once it's already loaded. Without this, a farmer with
++//       no signal who force-closes the app couldn't reopen it at all.
++//
++//  runtimeCaching uses Serwist's sane Next.js defaults (cache-first for
++//  static assets/fonts, network-first for pages/API so data is fresh
++//  whenever there IS a connection, falling back to cache when there
++//  isn't).
++// ─────────────────────────────────────────────
++
++/// <reference lib="webworker" />
++
++import { defaultCache } from "@serwist/next/worker";
++import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
++import { Serwist } from "serwist";
++
++declare global {
++  interface WorkerGlobalScope extends SerwistGlobalConfig {
++    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
++  }
++}
++
++declare const self: ServiceWorkerGlobalScope;
++
++const serwist = new Serwist({
++  precacheEntries: self.__SW_MANIFEST,
++  skipWaiting: true,
++  clientsClaim: true,
++  navigationPreload: true,
++  runtimeCaching: defaultCache,
++});
++
++serwist.addEventListeners();
+diff --git a/next.config.ts b/next.config.ts
+index e9ffa30..f2c5c74 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -1,7 +1,20 @@
+ import type { NextConfig } from "next";
++import withSerwistInit from "@serwist/next";
+ 
+ const nextConfig: NextConfig = {
+   /* config options here */
+ };
+ 
+-export default nextConfig;
++// Generates public/sw.js at build time from app/sw.ts, and precaches
++// every static asset Next.js produces (so the app SHELL loads even with
++// zero connection — separate from the offline data queue, which handles
++// the DATA side of working offline).
++// Disabled in dev: a service worker caching your own dev server makes
++// hot-reload behave unpredictably (stale JS surviving a refresh).
++const withSerwist = withSerwistInit({
++  swSrc: "app/sw.ts",
++  swDest: "public/sw.js",
++  disable: process.env.NODE_ENV === "development",
++});
++
++export default withSerwist(nextConfig);
+diff --git a/package.json b/package.json
+index 6db0780..7703ce7 100644
+--- a/package.json
++++ b/package.json
+@@ -4,11 +4,12 @@
+   "private": true,
+   "scripts": {
+     "dev": "next dev",
+-    "build": "next build",
++    "build": "next build --webpack",
+     "start": "next start",
+     "lint": "eslint"
+   },
+   "dependencies": {
++    "@serwist/next": "^9.5.12",
+     "bcryptjs": "^3.0.3",
+     "date-fns": "^4.4.0",
+     "jose": "^6.2.3",
+@@ -20,7 +21,8 @@
+     "nodemailer": "^9.0.3",
+     "react": "19.2.4",
+     "react-dom": "19.2.4",
+-    "recharts": "^3.9.0"
++    "recharts": "^3.9.0",
++    "serwist": "^9.5.12"
+   },
+   "devDependencies": {
+     "@tailwindcss/postcss": "^4",

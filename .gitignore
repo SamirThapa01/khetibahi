@@ -36,3 +36,8 @@ yarn-error.log*
 # IDE
 .vscode/
 .idea/
+
+# Serwist — generated at build time from app/sw.ts, don't commit the output
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js

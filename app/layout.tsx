@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
 import LayoutShell from "./components/LayoutShell";
 import { InformationProvider } from "./components/Information";
+import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
 InformationProvider
 
 // Display face — confident geometric sans for headings & numbers
@@ -24,6 +25,25 @@ export const metadata: Metadata = {
   title: "KhetiBahi — Farm Expense Tracker",
   description:
     "Track pesticide, fertilizer, seed, labor, and transport costs for your farm.",
+  // app/manifest.ts already generates /manifest.webmanifest and Next.js
+  // auto-links it — appleWebApp + icons below cover what iOS Safari
+  // still needs its own way (it ignores the manifest for install icons).
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "KhetiBahi",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1f6b45",
 };
 
 export default function RootLayout({
@@ -37,6 +57,7 @@ export default function RootLayout({
       className={`${heading.variable} ${body.variable}`}
     >
       <body className="font-sans antialiased bg-canvas text-ink">
+        <ServiceWorkerRegister />
         <InformationProvider>
           <AuthProvider>
             {/*
