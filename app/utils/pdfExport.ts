@@ -48,6 +48,16 @@ function safeSlug(s: string): string {
   return s.trim().replace(/\s+/g, "-").toLowerCase();
 }
 
+// jsPDF's built-in fonts (Helvetica/Times/Courier) have no emoji glyphs —
+// printing one renders as garbled boxes/symbols instead of the emoji, and
+// throws off that line's width. Crop labels in the UI are "🍅 Tomato" (see
+// CROPS in constants.ts), so strip the emoji + any leftover leading space
+// before anything reaches doc.text() or a filename. The on-screen modal
+// keeps the emoji — this only affects the generated PDF/filename.
+function stripEmoji(s: string): string {
+  return s.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\uFE0F\u{200D}]/gu, "").trim();
+}
+
 /**
  * One buyer's sales for one crop (or "All Crops" if not scoped) —
  * table of every sale plus a totals block underneath.
@@ -67,7 +77,7 @@ export function exportBuyerHistoryToPDF(
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.text(`Buyer: ${buyer}`, 14, 27);
-  doc.text(`Crop: ${cropLabel}`, 14, 33);
+  doc.text(`Crop: ${stripEmoji(cropLabel)}`, 14, 33);
   doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 39);
 
   autoTable(doc, {
@@ -99,7 +109,7 @@ export function exportBuyerHistoryToPDF(
   doc.text(`Total paid: ${formatNPR(summary.totalPaid)}`, 14, finalY + 34);
   doc.text(`Total still due: ${formatNPR(summary.totalDue)}`, 14, finalY + 40);
 
-  doc.save(`buyer-history-${safeSlug(buyer)}-${safeSlug(cropLabel)}.pdf`);
+  doc.save(`buyer-history-${safeSlug(buyer)}-${safeSlug(stripEmoji(cropLabel))}.pdf`);
 }
 
 /**
@@ -146,7 +156,7 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
   // ── Page 1: one row per buyer ──
   doc.setFontSize(16);
   doc.setFont("helvetica", "bold");
-  doc.text(`KhetiBahi — All Buyers · ${cropLabel}`, 14, 18);
+  doc.text(`KhetiBahi — All Buyers · ${stripEmoji(cropLabel)}`, 14, 18);
 
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
@@ -217,5 +227,5 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
     cursorY = lastTableEndY(doc) + 14;
   }
 
-  doc.save(`all-buyers-${safeSlug(cropLabel)}.pdf`);
+  doc.save(`all-buyers-${safeSlug(stripEmoji(cropLabel))}.pdf`);
 }
