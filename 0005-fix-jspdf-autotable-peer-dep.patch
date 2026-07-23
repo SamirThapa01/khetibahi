@@ -1,0 +1,28 @@
+diff --git a/app/utils/pdfExport.ts b/app/utils/pdfExport.ts
+index f801459..9060851 100644
+--- a/app/utils/pdfExport.ts
++++ b/app/utils/pdfExport.ts
+@@ -14,8 +14,8 @@
+ //  Install with:  npm install jspdf jspdf-autotable
+ // ─────────────────────────────────────────────
+ 
+-import jsPDF from "jspdf";
+-import autoTable from "jspdf-autotable";
++import { jsPDF } from "jspdf";
++import { autoTable } from "jspdf-autotable";
+ import { formatNPR, prettyDate } from "./helpers";
+ 
+ export interface BuyerHistoryRecord {
+diff --git a/package.json b/package.json
+index a76f072..6db0780 100644
+--- a/package.json
++++ b/package.json
+@@ -13,7 +13,7 @@
+     "date-fns": "^4.4.0",
+     "jose": "^6.2.3",
+     "jspdf": "^3.0.1",
+-    "jspdf-autotable": "^3.8.4",
++    "jspdf-autotable": "^5.0.8",
+     "lucide-react": "^1.22.0",
+     "mongoose": "^9.7.3",
+     "next": "16.2.9",

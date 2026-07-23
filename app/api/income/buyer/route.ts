@@ -10,6 +10,11 @@
 //  spelling variations across records genuinely are different buyers
 //  as far as this feature is concerned; that mirrors how the Income
 //  page's own table already treats buyer as a free-text field.
+//
+//  Optional `crop` param scopes the lookup to one crop — used by the
+//  Crops tab's per-vegetable Buyer History (e.g. "everything Ram
+//  Krishi Pasal has bought, but only Tomato"). Omit it to get the
+//  buyer's full history across every crop, same as before.
 // ─────────────────────────────────────────────
 
 import { NextRequest, NextResponse } from "next/server";
@@ -23,6 +28,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const buyer = searchParams.get("name")?.trim();
+  const crop = searchParams.get("crop")?.trim();
   if (!buyer) {
     return NextResponse.json({ error: "A buyer name is required." }, { status: 400 });
   }
@@ -31,10 +37,13 @@ export async function GET(req: NextRequest) {
 
   // ^...$ anchors it to an exact (case-insensitive) match, not a substring.
   const escaped = buyer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const sales = await Income.find({
+  const query: Record<string, unknown> = {
     userId: user.userId,
     buyer: { $regex: `^${escaped}$`, $options: "i" },
-  }).sort({ date: -1, createdAt: -1 });
+  };
+  if (crop) query.crop = crop;
+
+  const sales = await Income.find(query).sort({ date: -1, createdAt: -1 });
 
   const records = sales.map((doc) => ({
     id: doc._id.toString(),
@@ -54,6 +63,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     buyer,
+    crop: crop ?? null,
     records,
     summary: {
       totalAmount,

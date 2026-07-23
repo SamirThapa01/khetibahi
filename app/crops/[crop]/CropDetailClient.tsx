@@ -2,13 +2,15 @@
 //  KhetiBahi – CropDetailClient
 //
 //  Everything about ONE crop: profit/loss,
-//  every sale (with payment status), and every
-//  expense tagged to it.
+//  every sale (with payment status), every
+//  expense tagged to it, and — new — a Buyer
+//  History search scoped to just this crop,
+//  plus a one-click "export all buyers" PDF.
 // ─────────────────────────────────────────────
 
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -22,12 +24,16 @@ import {
   Clock3,
   Inbox,
   Plus,
+  Users,
+  FileDown,
 } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import { CROPS, CATEGORIES } from "@/app/utils/constants";
 import { formatNPR, prettyDate, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CropDetailSkeleton } from "@/app/components/Skeleton";
+import CropBuyerHistoryModal from "@/app/components/CropBuyerHistoryModal";
+import { exportCropBuyersToPDF } from "@/app/utils/pdfExport";
 
 const STATUS_META = {
   Paid:    { label: "Paid",    Icon: CheckCircle2,     text: "text-brand",    bg: "bg-brand-soft" },
@@ -38,6 +44,7 @@ const STATUS_META = {
 export default function CropDetailClient({ cropParam }: { cropParam: string }) {
   const { expenses, isLoaded } = useExpenses();
   const { income, isLoaded: incomeLoaded } = useIncome();
+  const [buyerHistoryOpen, setBuyerHistoryOpen] = useState(false);
 
   const cropMeta = CROPS.find((c) => c.value === cropParam && c.value !== "All Crops");
 
@@ -80,6 +87,22 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
   const qty = pl?.quantitySoldKg ?? 0;
   const due$ = pl?.amountDue ?? 0;
   const isProfit = profit$ >= 0;
+  const cropLabel = `${cropMeta.emoji} ${cropMeta.label}`;
+
+  function handleExportAllBuyers() {
+    const records = cropIncome.map((inc) => ({
+      id: inc.id,
+      date: inc.date,
+      crop: inc.crop,
+      buyer: inc.buyer,
+      quantityKg: inc.quantityKg,
+      ratePerKg: inc.ratePerKg,
+      amount: inc.quantityKg * inc.ratePerKg,
+      amountPaid: inc.amountPaid,
+      note: inc.note,
+    }));
+    exportCropBuyersToPDF(cropLabel, records);
+  }
 
   return (
     <div className="space-y-5">
@@ -150,15 +173,34 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Sales for this crop */}
         <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
-          <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line">
+          <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-line gap-2 flex-wrap">
             <h2 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
               <Scale className="w-4 h-4 text-ink-faint" />
               Sales
             </h2>
-            <Link href="/income" className="flex items-center gap-1 text-xs text-brand font-medium hover:underline">
-              <Plus className="w-3.5 h-3.5" />
-              Log Sale
-            </Link>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              {cropIncome.length > 0 && (
+                <button
+                  onClick={handleExportAllBuyers}
+                  className="flex items-center gap-1 text-xs text-ink-muted font-medium hover:text-brand hover:underline"
+                  title="Export every buyer's history for this crop as one PDF"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  Export All
+                </button>
+              )}
+              <button
+                onClick={() => setBuyerHistoryOpen(true)}
+                className="flex items-center gap-1 text-xs text-ink-muted font-medium hover:text-brand hover:underline"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Buyer History
+              </button>
+              <Link href="/income" className="flex items-center gap-1 text-xs text-brand font-medium hover:underline">
+                <Plus className="w-3.5 h-3.5" />
+                Log Sale
+              </Link>
+            </div>
           </div>
           {cropIncome.length === 0 ? (
             <div className="text-center py-10">
@@ -240,6 +282,15 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
         <p className="text-xs text-ink-faint text-center">
           Note: general farm expenses tagged &quot;All Crops&quot; aren&apos;t counted here — only costs tagged specifically to {cropMeta.label.toLowerCase()}.
         </p>
+      )}
+
+      {/* Modal: crop-scoped buyer history + single-buyer PDF export */}
+      {buyerHistoryOpen && (
+        <CropBuyerHistoryModal
+          crop={cropParam}
+          cropLabel={cropLabel}
+          onClose={() => setBuyerHistoryOpen(false)}
+        />
       )}
     </div>
   );
