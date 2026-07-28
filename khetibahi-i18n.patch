@@ -1,0 +1,589 @@
+diff --git a/app/components/Navbar.tsx b/app/components/Navbar.tsx
+index 84c9a86..68f8d6d 100644
+--- a/app/components/Navbar.tsx
++++ b/app/components/Navbar.tsx
+@@ -16,21 +16,24 @@
+ import Link from "next/link";
+ import { usePathname } from "next/navigation";
+ import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf } from "lucide-react";
++import { useTranslation } from "@/lib/i18n/useTranslation";
++import type { TranslationKey } from "@/lib/i18n/en";
+ 
+-const NAV = [
+-  { href: "/",          label: "Home",      Icon: LayoutDashboard },
+-  { href: "/income",    label: "Income",    Icon: Coins           },
+-  { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+-  { href: "/crops",     label: "Crops",     Icon: Leaf            },
+-  { href: "/analytics", label: "Stats",     Icon: BarChart2       },
++const NAV: { href: string; labelKey: TranslationKey; Icon: typeof LayoutDashboard }[] = [
++  { href: "/",          labelKey: "nav.home",      Icon: LayoutDashboard },
++  { href: "/income",    labelKey: "nav.income",    Icon: Coins           },
++  { href: "/expenses",  labelKey: "nav.expenses",  Icon: ListFilter      },
++  { href: "/crops",     labelKey: "nav.crops",     Icon: Leaf            },
++  { href: "/analytics", labelKey: "nav.stats",     Icon: BarChart2       },
+ ];
+ 
+ export default function Navbar() {
+   const pathname = usePathname();
++  const t = useTranslation();
+ 
+   return (
+     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 flex bg-surface/95 backdrop-blur-md border-t border-line shadow-lift">
+-      {NAV.map(({ href, label, Icon }) => {
++      {NAV.map(({ href, labelKey, Icon }) => {
+         const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+         return (
+           <Link
+@@ -41,7 +44,7 @@ export default function Navbar() {
+             }`}
+           >
+             <Icon className="w-4.5 h-4.5" />
+-            {label}
++            {t(labelKey)}
+           </Link>
+         );
+       })}
+diff --git a/app/components/Sidebar.tsx b/app/components/Sidebar.tsx
+index ec0879e..1311ce7 100644
+--- a/app/components/Sidebar.tsx
++++ b/app/components/Sidebar.tsx
+@@ -24,19 +24,23 @@ import {
+   Leaf,
+   PiggyBank,
+   Repeat,
+-  HandCoins
++  HandCoins,
++  Languages,
+ } from "lucide-react";
+ import { useAuth } from "@/app/context/AuthContext";
++import { useTranslation } from "@/lib/i18n/useTranslation";
++import { useLanguage } from "@/lib/i18n/LanguageContext";
++import type { TranslationKey } from "@/lib/i18n/en";
+ 
+-const NAV = [
+-  { href: "/",          label: "Dashboard", Icon: LayoutDashboard },
+-  { href: "/income",    label: "Income",    Icon: Coins           },
+-  { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
+-  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
+-  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
+- { href: "/recurring", label: "Recurring", Icon: Repeat          },
+-  { href: "/crops",     label: "Crops",     Icon: Leaf            },
+-  { href: "/analytics", label: "Analytics", Icon: BarChart2       },
++const NAV: { href: string; labelKey: TranslationKey; Icon: typeof LayoutDashboard }[] = [
++  { href: "/",          labelKey: "nav.dashboard", Icon: LayoutDashboard },
++  { href: "/income",    labelKey: "nav.income",    Icon: Coins           },
++  { href: "/expenses",  labelKey: "nav.expenses",  Icon: ListFilter      },
++  { href: "/loans",     labelKey: "nav.loans",     Icon: HandCoins       },
++  { href: "/budgets",   labelKey: "nav.budgets",   Icon: PiggyBank       },
++  { href: "/recurring", labelKey: "nav.recurring", Icon: Repeat          },
++  { href: "/crops",     labelKey: "nav.crops",     Icon: Leaf            },
++  { href: "/analytics", labelKey: "nav.analytics", Icon: BarChart2       },
+ ];
+ 
+ const AUTH_PAGES = ["/login", "/signup"];
+@@ -45,6 +49,8 @@ export default function Sidebar() {
+   const pathname  = usePathname();
+   const router    = useRouter();
+   const { user, logout } = useAuth();
++  const t = useTranslation();
++  const { lang, toggleLang } = useLanguage();
+ 
+   // Hide on auth pages and while not logged in
+   if (AUTH_PAGES.includes(pathname) || !user) return null;
+@@ -81,7 +87,7 @@ export default function Sidebar() {
+ 
+       {/* ── Nav ── */}
+       <nav className="flex-1 px-3 py-2 space-y-0.5">
+-        {NAV.map(({ href, label, Icon }) => {
++        {NAV.map(({ href, labelKey, Icon }) => {
+           const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+           return (
+             <Link
+@@ -100,7 +106,7 @@ export default function Sidebar() {
+               }}
+             >
+               <Icon className="w-4 h-4 flex-shrink-0" />
+-              {label}
++              {t(labelKey)}
+             </Link>
+           );
+         })}
+@@ -111,6 +117,20 @@ export default function Sidebar() {
+         className="px-4 py-4 mt-auto space-y-3"
+         style={{ borderTop: "1px solid var(--sidebar-border)" }}
+       >
++        {/* Language toggle — EN / ने. Sits above the identity row so it
++            reads as an app-level setting, not a profile field. */}
++        <button
++          onClick={toggleLang}
++          className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm transition-colors"
++          style={{ color: "var(--sidebar-text)" }}
++          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover)")}
++          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
++          aria-label="Toggle language"
++        >
++          <Languages className="w-4 h-4" />
++          {lang === "en" ? "नेपालीमा हेर्नुहोस्" : "View in English"}
++        </button>
++
+         {/* Farm identity row */}
+         <Link href="/profile" className="flex items-center gap-2.5 group">
+           {user.profileImage ? (
+@@ -136,7 +156,7 @@ export default function Sidebar() {
+               {user.name}
+             </p>
+             <p className="text-[11px] leading-tight truncate" style={{ color: "var(--sidebar-text)" }}>
+-              Farm Owner
++              {t("common.farmOwner")}
+             </p>
+           </div>
+         </Link>
+@@ -150,7 +170,7 @@ export default function Sidebar() {
+           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+         >
+           <LogOut className="w-4 h-4" />
+-          Log out
++          {t("common.logout")}
+         </button>
+       </div>
+     </aside>
+diff --git a/app/components/TopBar.tsx b/app/components/TopBar.tsx
+index 8fd4f34..4d688ba 100644
+--- a/app/components/TopBar.tsx
++++ b/app/components/TopBar.tsx
+@@ -5,7 +5,8 @@
+ //
+ //  The slim header that sits above the main
+ //  content area (to the RIGHT of the sidebar).
+-//  Contains: search, dark-mode toggle, bell, user.
++//  Contains: search, dark-mode toggle, language
++//  toggle, bell, user.
+ //
+ //  Only shown when logged in and not on auth pages.
+ //
+@@ -16,16 +17,23 @@
+ //  section — Profile is already one tap away via
+ //  the avatar chip below, so there's no longer a
+ //  separate gear icon.
++//
++//  Language toggle lives here (not just Sidebar)
++//  because Sidebar is desktop-only — mobile users
++//  need their own way to switch languages, and
++//  TopBar is visible on every screen size.
+ // ─────────────────────────────────────────────
+ 
+ import { useState } from "react";
+ import { usePathname } from "next/navigation";
+ import Link from "next/link";
+-import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2, WifiOff, CloudUpload } from "lucide-react";
++import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2, WifiOff, CloudUpload, Languages } from "lucide-react";
+ import { useDarkMode } from "@/app/hooks/useDarkMode";
+ import { useAuth } from "@/app/context/AuthContext";
+ import { useNotifications } from "@/app/hooks/useNotifications";
+ import { useOfflineQueueSummary } from "@/app/hooks/useOfflineQueueSummary";
++import { useTranslation } from "@/lib/i18n/useTranslation";
++import { useLanguage } from "@/lib/i18n/LanguageContext";
+ 
+ const AUTH_PAGES = ["/login", "/signup"];
+ 
+@@ -36,6 +44,8 @@ export default function TopBar() {
+   const [notifOpen, setNotifOpen] = useState(false);
+   const { notifications, dismiss } = useNotifications();
+   const { isOnline, pendingCount } = useOfflineQueueSummary();
++  const t = useTranslation();
++  const { lang, toggleLang } = useLanguage();
+ 
+   if (AUTH_PAGES.includes(pathname) || !user) return null;
+ 
+@@ -54,7 +64,7 @@ export default function TopBar() {
+           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
+           <input
+             type="text"
+-            placeholder="Search crops, income, expenses…"
++            placeholder={t("topbar.searchPlaceholder")}
+             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-surface-2 text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent"
+           />
+         </div>
+@@ -71,16 +81,26 @@ export default function TopBar() {
+               {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
+               {!isOnline
+                 ? pendingCount > 0
+-                  ? `Offline · ${pendingCount} pending`
+-                  : "Offline"
+-                : `Syncing ${pendingCount}…`}
++                  ? t("topbar.offlinePending", { count: pendingCount })
++                  : t("topbar.offline")
++                : t("topbar.syncing", { count: pendingCount })}
+             </span>
+           )}
+ 
++          {/* Language toggle — EN / ने */}
++          <button
++            onClick={toggleLang}
++            aria-label="Toggle language"
++            className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors flex items-center gap-1"
++          >
++            <Languages className="w-4 h-4" />
++            <span className="text-[11px] font-semibold hidden sm:inline">{lang === "en" ? "ने" : "EN"}</span>
++          </button>
++
+           {/* Dark mode toggle */}
+           <button
+             onClick={toggle}
+-            aria-label="Toggle dark mode"
++            aria-label={t("topbar.toggleDarkMode")}
+             className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
+           >
+             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+@@ -89,7 +109,7 @@ export default function TopBar() {
+           {/* Bell — shows a count badge and opens the notifications panel */}
+           <button
+             onClick={() => setNotifOpen((v) => !v)}
+-            aria-label="Notifications"
++            aria-label={t("common.notifications")}
+             className={`relative p-2 rounded-xl transition-colors ${
+               notifOpen ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
+             }`}
+@@ -125,7 +145,7 @@ export default function TopBar() {
+             )}
+             <div className="hidden sm:block leading-tight">
+               <p className="text-sm font-semibold text-ink truncate max-w-[120px]">{user.name}</p>
+-              <p className="text-[11px] text-ink-muted">Farm Owner</p>
++              <p className="text-[11px] text-ink-muted">{t("common.farmOwner")}</p>
+             </div>
+             <ChevronDown className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
+           </Link>
+@@ -144,9 +164,9 @@ export default function TopBar() {
+           {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
+           {!isOnline
+             ? pendingCount > 0
+-              ? `Offline · ${pendingCount} change${pendingCount === 1 ? "" : "s"} pending`
+-              : "Offline — changes will save on this device"
+-            : `Syncing ${pendingCount} change${pendingCount === 1 ? "" : "s"}…`}
++              ? t(pendingCount === 1 ? "topbar.offlineMobilePendingOne" : "topbar.offlineMobilePendingOther", { count: pendingCount })
++              : t("topbar.offlineMobileNoPending")
++            : t(pendingCount === 1 ? "topbar.syncingMobileOne" : "topbar.syncingMobileOther", { count: pendingCount })}
+         </div>
+       )}
+ 
+@@ -158,8 +178,8 @@ export default function TopBar() {
+             onClick={(e) => e.stopPropagation()}
+           >
+             <div className="flex items-center justify-between px-4 py-3 border-b border-line">
+-              <span className="text-sm font-display font-semibold text-ink">Notifications</span>
+-              <button onClick={() => setNotifOpen(false)} aria-label="Close" className="p-1 text-ink-faint">
++              <span className="text-sm font-display font-semibold text-ink">{t("common.notifications")}</span>
++              <button onClick={() => setNotifOpen(false)} aria-label={t("common.close")} className="p-1 text-ink-faint">
+                 <X className="w-4 h-4" />
+               </button>
+             </div>
+@@ -167,7 +187,7 @@ export default function TopBar() {
+             {notifications.length === 0 ? (
+               <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+                 <CheckCircle2 className="w-6 h-6 text-brand" />
+-                <p className="text-xs text-ink-muted">You&apos;re all caught up.</p>
++                <p className="text-xs text-ink-muted">{t("common.allCaughtUp")}</p>
+               </div>
+             ) : (
+               <div className="divide-y divide-line">
+@@ -187,7 +207,7 @@ export default function TopBar() {
+                       </Link>
+                       <button
+                         onClick={() => dismiss(n.id)}
+-                        aria-label="Dismiss"
++                        aria-label={t("common.dismiss")}
+                         className="flex-shrink-0 p-1 rounded-lg text-ink-faint hover:bg-surface-2"
+                       >
+                         <X className="w-3.5 h-3.5" />
+@@ -202,4 +222,4 @@ export default function TopBar() {
+       )}
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/app/layout.tsx b/app/layout.tsx
+index 6a2c1cb..c659c5b 100644
+--- a/app/layout.tsx
++++ b/app/layout.tsx
+@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
+ import { Plus_Jakarta_Sans, Inter } from "next/font/google";
+ import "./globals.css";
+ import { AuthProvider } from "./context/AuthContext";
++import { LanguageProvider } from "@/lib/i18n/LanguageContext";
+ import LayoutShell from "./components/LayoutShell";
+ import { InformationProvider } from "./components/Information";
+ import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
+@@ -51,6 +52,8 @@ export default function RootLayout({
+ }: Readonly<{ children: React.ReactNode }>) {
+   return (
+     // suppressHydrationWarning: the "dark" class is toggled client-side
++    // (and now the html lang attribute may also shift client-side once
++    // the saved language preference loads from localStorage)
+     <html
+       lang="en"
+       suppressHydrationWarning
+@@ -60,16 +63,18 @@ export default function RootLayout({
+         <ServiceWorkerRegister />
+         <InformationProvider>
+           <AuthProvider>
+-            {/*
+-              LayoutShell is a Client Component that decides which chrome to
+-              render:
+-                - Auth pages (/login, /signup) → no sidebar, no topbar, just children
+-                - App pages → sidebar + topbar + main content + mobile nav
+-            */}
+-            <LayoutShell>{children}</LayoutShell>
++            <LanguageProvider>
++              {/*
++                LayoutShell is a Client Component that decides which chrome to
++                render:
++                  - Auth pages (/login, /signup) → no sidebar, no topbar, just children
++                  - App pages → sidebar + topbar + main content + mobile nav
++              */}
++              <LayoutShell>{children}</LayoutShell>
++            </LanguageProvider>
+           </AuthProvider>
+         </InformationProvider>
+       </body>
+     </html>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/lib/i18n/LanguageContext.tsx b/lib/i18n/LanguageContext.tsx
+new file mode 100644
+index 0000000..8289b2b
+--- /dev/null
++++ b/lib/i18n/LanguageContext.tsx
+@@ -0,0 +1,74 @@
++"use client";
++
++// ─────────────────────────────────────────────
++//  KhetiBahi – Language Context
++//
++//  Holds ONE piece of state — the active language — and makes
++//  it available to every component in the tree via useLanguage().
++//  This is the same pattern as useDarkMode()/AuthContext already
++//  in this codebase: Context + localStorage, no routing changes.
++//
++//  Why localStorage and not the URL: next-intl-style setups put
++//  the locale in the URL (/ne/expenses), which needs the whole
++//  app/ tree restructured into app/[locale]/... . This app has
++//  48+ existing route files already built, so we avoid that
++//  entirely — the toggle just flips a client-side value.
++// ─────────────────────────────────────────────
++
++import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
++
++export type Language = "en" | "ne";
++
++const STORAGE_KEY = "khetibahi-lang";
++
++interface LanguageContextValue {
++  lang: Language;
++  setLang: (lang: Language) => void;
++  toggleLang: () => void;
++}
++
++const LanguageContext = createContext<LanguageContextValue | null>(null);
++
++export function LanguageProvider({ children }: { children: ReactNode }) {
++  // Default "en" on the server (and on first client render, to avoid
++  // a hydration mismatch) — we read the real saved value in useEffect,
++  // same pattern useDarkMode() presumably already uses in this app.
++  const [lang, setLangState] = useState<Language>("en");
++  const [hydrated, setHydrated] = useState(false);
++
++  useEffect(() => {
++    const saved = localStorage.getItem(STORAGE_KEY);
++    if (saved === "en" || saved === "ne") {
++      setLangState(saved);
++    }
++    setHydrated(true);
++  }, []);
++
++  function setLang(next: Language) {
++    setLangState(next);
++    localStorage.setItem(STORAGE_KEY, next);
++  }
++
++  function toggleLang() {
++    setLang(lang === "en" ? "ne" : "en");
++  }
++
++  return (
++    <LanguageContext.Provider value={{ lang, setLang, toggleLang }}>
++      {/* suppressHydrationWarning-style guard: render children always,
++          they just briefly show English until localStorage is read.
++          hydrated is exposed via context if a component ever needs to
++          avoid a flash — not needed for text swaps since English is a
++          reasonable default flash. */}
++      {children}
++    </LanguageContext.Provider>
++  );
++}
++
++export function useLanguage(): LanguageContextValue {
++  const ctx = useContext(LanguageContext);
++  if (!ctx) {
++    throw new Error("useLanguage must be used within <LanguageProvider>");
++  }
++  return ctx;
++}
+diff --git a/lib/i18n/en.ts b/lib/i18n/en.ts
+new file mode 100644
+index 0000000..a06ed42
+--- /dev/null
++++ b/lib/i18n/en.ts
+@@ -0,0 +1,54 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – English dictionary
++//
++//  This file is the SOURCE OF TRUTH for translation keys.
++//  Every key that exists here must also exist in ne.ts —
++//  useTranslation.ts falls back to this file if a key is
++//  ever missing from ne.ts, so the app never shows a raw
++//  key like "nav.expenses" to the user.
++//
++//  Naming convention: "<area>.<thing>"
++//  e.g. "nav.expenses", "topbar.searchPlaceholder"
++// ─────────────────────────────────────────────
++
++const en = {
++  // ── Common / shared across components ──
++  "common.farmOwner": "Farm Owner",
++  "common.logout": "Log out",
++  "common.notifications": "Notifications",
++  "common.dismiss": "Dismiss",
++  "common.close": "Close",
++  "common.allCaughtUp": "You're all caught up.",
++
++  // ── Sidebar / Navbar nav labels ──
++  "nav.dashboard": "Dashboard",
++  "nav.home": "Home",
++  "nav.income": "Income",
++  "nav.expenses": "Expenses",
++  "nav.loans": "Udhaar",
++  "nav.budgets": "Budgets",
++  "nav.recurring": "Recurring",
++  "nav.crops": "Crops",
++  "nav.analytics": "Analytics",
++  "nav.stats": "Stats",
++
++  // ── TopBar ──
++  "topbar.searchPlaceholder": "Search crops, income, expenses…",
++  "topbar.toggleDarkMode": "Toggle dark mode",
++  "topbar.offline": "Offline",
++  "topbar.offlinePending": "Offline · {count} pending",
++  "topbar.syncing": "Syncing {count}…",
++  "topbar.offlineMobileNoPending": "Offline — changes will save on this device",
++  "topbar.offlineMobilePendingOne": "Offline · {count} change pending",
++  "topbar.offlineMobilePendingOther": "Offline · {count} changes pending",
++  "topbar.syncingMobileOne": "Syncing {count} change…",
++  "topbar.syncingMobileOther": "Syncing {count} changes…",
++} as const;
++
++export default en;
++
++// Type used by ne.ts to guarantee it has every key `en` has, and
++// used by useTranslation.ts so t("...") only accepts real keys —
++// a typo like t("nav.expenses ") with a stray space fails to compile
++// instead of silently rendering the raw key at runtime.
++export type TranslationKey = keyof typeof en;
+diff --git a/lib/i18n/ne.ts b/lib/i18n/ne.ts
+new file mode 100644
+index 0000000..34eb1b0
+--- /dev/null
++++ b/lib/i18n/ne.ts
+@@ -0,0 +1,46 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Nepali (Devanagari) dictionary
++//
++//  Must have the same keys as en.ts. TypeScript enforces
++//  this via `satisfies Record<TranslationKey, string>` below —
++//  if you add a key to en.ts and forget it here, this file
++//  will fail to compile instead of silently falling back.
++// ─────────────────────────────────────────────
++
++import type { TranslationKey } from "./en";
++
++const ne = {
++  // ── Common ──
++  "common.farmOwner": "किसान",
++  "common.logout": "लगआउट",
++  "common.notifications": "सूचनाहरू",
++  "common.dismiss": "हटाउनुहोस्",
++  "common.close": "बन्द गर्नुहोस्",
++  "common.allCaughtUp": "तपाईं सबै अपडेट हुनुहुन्छ।",
++
++  // ── Sidebar / Navbar ──
++  "nav.dashboard": "ड्यासबोर्ड",
++  "nav.home": "गृहपृष्ठ",
++  "nav.income": "आम्दानी",
++  "nav.expenses": "खर्च",
++  "nav.loans": "उधारो",
++  "nav.budgets": "बजेट",
++  "nav.recurring": "आवर्ती खर्च",
++  "nav.crops": "बाली",
++  "nav.analytics": "विश्लेषण",
++  "nav.stats": "तथ्याङ्क",
++
++  // ── TopBar ──
++  "topbar.searchPlaceholder": "बाली, आम्दानी, खर्च खोज्नुहोस्…",
++  "topbar.toggleDarkMode": "डार्क मोड बदल्नुहोस्",
++  "topbar.offline": "अफलाइन",
++  "topbar.offlinePending": "अफलाइन · {count} बाँकी",
++  "topbar.syncing": "{count} सिंक हुँदैछ…",
++  "topbar.offlineMobileNoPending": "अफलाइन — परिवर्तनहरू यही डिभाइसमा सुरक्षित हुनेछन्",
++  "topbar.offlineMobilePendingOne": "अफलाइन · {count} परिवर्तन बाँकी",
++  "topbar.offlineMobilePendingOther": "अफलाइन · {count} परिवर्तनहरू बाँकी",
++  "topbar.syncingMobileOne": "{count} परिवर्तन सिंक हुँदैछ…",
++  "topbar.syncingMobileOther": "{count} परिवर्तनहरू सिंक हुँदैछ…",
++} satisfies Record<TranslationKey, string>;
++
++export default ne;
+diff --git a/lib/i18n/useTranslation.ts b/lib/i18n/useTranslation.ts
+new file mode 100644
+index 0000000..af3ec99
+--- /dev/null
++++ b/lib/i18n/useTranslation.ts
+@@ -0,0 +1,38 @@
++"use client";
++
++// ─────────────────────────────────────────────
++//  KhetiBahi – useTranslation hook
++//
++//  const t = useTranslation();
++//  t("nav.expenses")                          → "Expenses" / "खर्च"
++//  t("topbar.syncing", { count: 3 })          → "Syncing 3…" / "3 सिंक हुँदैछ…"
++//
++//  {count} etc. inside a dictionary string get replaced with the
++//  matching value from the second argument. Any key not found in
++//  the active language falls back to English, then to the raw key
++//  itself (so a typo shows up as visible broken text instead of
++//  crashing the page — easy to spot in QA).
++// ─────────────────────────────────────────────
++
++import { useLanguage } from "./LanguageContext";
++import en, { type TranslationKey } from "./en";
++import ne from "./ne";
++
++type Vars = Record<string, string | number>;
++
++export function useTranslation() {
++  const { lang } = useLanguage();
++  const dict = lang === "ne" ? ne : en;
++
++  function t(key: TranslationKey, vars?: Vars): string {
++    let str: string = dict[key] ?? en[key] ?? key;
++    if (vars) {
++      for (const [k, v] of Object.entries(vars)) {
++        str = str.replaceAll(`{${k}}`, String(v));
++      }
++    }
++    return str;
++  }
++
++  return t;
++}

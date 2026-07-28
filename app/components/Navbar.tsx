@@ -16,21 +16,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, ListFilter, BarChart2, Coins, Leaf } from "lucide-react";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import type { TranslationKey } from "@/lib/i18n/en";
 
-const NAV = [
-  { href: "/",          label: "Home",      Icon: LayoutDashboard },
-  { href: "/income",    label: "Income",    Icon: Coins           },
-  { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
-  { href: "/crops",     label: "Crops",     Icon: Leaf            },
-  { href: "/analytics", label: "Stats",     Icon: BarChart2       },
+const NAV: { href: string; labelKey: TranslationKey; Icon: typeof LayoutDashboard }[] = [
+  { href: "/",          labelKey: "nav.home",      Icon: LayoutDashboard },
+  { href: "/income",    labelKey: "nav.income",    Icon: Coins           },
+  { href: "/expenses",  labelKey: "nav.expenses",  Icon: ListFilter      },
+  { href: "/crops",     labelKey: "nav.crops",     Icon: Leaf            },
+  { href: "/analytics", labelKey: "nav.stats",     Icon: BarChart2       },
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
+  const t = useTranslation();
 
   return (
     <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 flex bg-surface/95 backdrop-blur-md border-t border-line shadow-lift">
-      {NAV.map(({ href, label, Icon }) => {
+      {NAV.map(({ href, labelKey, Icon }) => {
         const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
         return (
           <Link
@@ -41,7 +44,7 @@ export default function Navbar() {
             }`}
           >
             <Icon className="w-4.5 h-4.5" />
-            {label}
+            {t(labelKey)}
           </Link>
         );
       })}

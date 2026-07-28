@@ -24,19 +24,23 @@ import {
   Leaf,
   PiggyBank,
   Repeat,
-  HandCoins
+  HandCoins,
+  Languages,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
+import type { TranslationKey } from "@/lib/i18n/en";
 
-const NAV = [
-  { href: "/",          label: "Dashboard", Icon: LayoutDashboard },
-  { href: "/income",    label: "Income",    Icon: Coins           },
-  { href: "/expenses",  label: "Expenses",  Icon: ListFilter      },
-  { href: "/loans",     label: "Udhaar",    Icon: HandCoins       },
-  { href: "/budgets",   label: "Budgets",   Icon: PiggyBank       },
- { href: "/recurring", label: "Recurring", Icon: Repeat          },
-  { href: "/crops",     label: "Crops",     Icon: Leaf            },
-  { href: "/analytics", label: "Analytics", Icon: BarChart2       },
+const NAV: { href: string; labelKey: TranslationKey; Icon: typeof LayoutDashboard }[] = [
+  { href: "/",          labelKey: "nav.dashboard", Icon: LayoutDashboard },
+  { href: "/income",    labelKey: "nav.income",    Icon: Coins           },
+  { href: "/expenses",  labelKey: "nav.expenses",  Icon: ListFilter      },
+  { href: "/loans",     labelKey: "nav.loans",     Icon: HandCoins       },
+  { href: "/budgets",   labelKey: "nav.budgets",   Icon: PiggyBank       },
+  { href: "/recurring", labelKey: "nav.recurring", Icon: Repeat          },
+  { href: "/crops",     labelKey: "nav.crops",     Icon: Leaf            },
+  { href: "/analytics", labelKey: "nav.analytics", Icon: BarChart2       },
 ];
 
 const AUTH_PAGES = ["/login", "/signup"];
@@ -45,6 +49,8 @@ export default function Sidebar() {
   const pathname  = usePathname();
   const router    = useRouter();
   const { user, logout } = useAuth();
+  const t = useTranslation();
+  const { lang, toggleLang } = useLanguage();
 
   // Hide on auth pages and while not logged in
   if (AUTH_PAGES.includes(pathname) || !user) return null;
@@ -81,7 +87,7 @@ export default function Sidebar() {
 
       {/* ── Nav ── */}
       <nav className="flex-1 px-3 py-2 space-y-0.5">
-        {NAV.map(({ href, label, Icon }) => {
+        {NAV.map(({ href, labelKey, Icon }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
           return (
             <Link
@@ -100,7 +106,7 @@ export default function Sidebar() {
               }}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
+              {t(labelKey)}
             </Link>
           );
         })}
@@ -111,6 +117,20 @@ export default function Sidebar() {
         className="px-4 py-4 mt-auto space-y-3"
         style={{ borderTop: "1px solid var(--sidebar-border)" }}
       >
+        {/* Language toggle — EN / ने. Sits above the identity row so it
+            reads as an app-level setting, not a profile field. */}
+        <button
+          onClick={toggleLang}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-sm transition-colors"
+          style={{ color: "var(--sidebar-text)" }}
+          onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "var(--sidebar-hover)")}
+          onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
+          aria-label="Toggle language"
+        >
+          <Languages className="w-4 h-4" />
+          {lang === "en" ? "नेपालीमा हेर्नुहोस्" : "View in English"}
+        </button>
+
         {/* Farm identity row */}
         <Link href="/profile" className="flex items-center gap-2.5 group">
           {user.profileImage ? (
@@ -136,7 +156,7 @@ export default function Sidebar() {
               {user.name}
             </p>
             <p className="text-[11px] leading-tight truncate" style={{ color: "var(--sidebar-text)" }}>
-              Farm Owner
+              {t("common.farmOwner")}
             </p>
           </div>
         </Link>
@@ -150,7 +170,7 @@ export default function Sidebar() {
           onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
         >
           <LogOut className="w-4 h-4" />
-          Log out
+          {t("common.logout")}
         </button>
       </div>
     </aside>

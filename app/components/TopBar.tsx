@@ -5,7 +5,8 @@
 //
 //  The slim header that sits above the main
 //  content area (to the RIGHT of the sidebar).
-//  Contains: search, dark-mode toggle, bell, user.
+//  Contains: search, dark-mode toggle, language
+//  toggle, bell, user.
 //
 //  Only shown when logged in and not on auth pages.
 //
@@ -16,16 +17,23 @@
 //  section — Profile is already one tap away via
 //  the avatar chip below, so there's no longer a
 //  separate gear icon.
+//
+//  Language toggle lives here (not just Sidebar)
+//  because Sidebar is desktop-only — mobile users
+//  need their own way to switch languages, and
+//  TopBar is visible on every screen size.
 // ─────────────────────────────────────────────
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2, WifiOff, CloudUpload } from "lucide-react";
+import { Search, Moon, Sun, Bell, ChevronDown, X, AlertTriangle, Clock3, CheckCircle2, WifiOff, CloudUpload, Languages } from "lucide-react";
 import { useDarkMode } from "@/app/hooks/useDarkMode";
 import { useAuth } from "@/app/context/AuthContext";
 import { useNotifications } from "@/app/hooks/useNotifications";
 import { useOfflineQueueSummary } from "@/app/hooks/useOfflineQueueSummary";
+import { useTranslation } from "@/lib/i18n/useTranslation";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const AUTH_PAGES = ["/login", "/signup"];
 
@@ -36,6 +44,8 @@ export default function TopBar() {
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, dismiss } = useNotifications();
   const { isOnline, pendingCount } = useOfflineQueueSummary();
+  const t = useTranslation();
+  const { lang, toggleLang } = useLanguage();
 
   if (AUTH_PAGES.includes(pathname) || !user) return null;
 
@@ -54,7 +64,7 @@ export default function TopBar() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-faint pointer-events-none" />
           <input
             type="text"
-            placeholder="Search crops, income, expenses…"
+            placeholder={t("topbar.searchPlaceholder")}
             className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-line bg-surface-2 text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent"
           />
         </div>
@@ -71,16 +81,26 @@ export default function TopBar() {
               {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
               {!isOnline
                 ? pendingCount > 0
-                  ? `Offline · ${pendingCount} pending`
-                  : "Offline"
-                : `Syncing ${pendingCount}…`}
+                  ? t("topbar.offlinePending", { count: pendingCount })
+                  : t("topbar.offline")
+                : t("topbar.syncing", { count: pendingCount })}
             </span>
           )}
+
+          {/* Language toggle — EN / ने */}
+          <button
+            onClick={toggleLang}
+            aria-label="Toggle language"
+            className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors flex items-center gap-1"
+          >
+            <Languages className="w-4 h-4" />
+            <span className="text-[11px] font-semibold hidden sm:inline">{lang === "en" ? "ने" : "EN"}</span>
+          </button>
 
           {/* Dark mode toggle */}
           <button
             onClick={toggle}
-            aria-label="Toggle dark mode"
+            aria-label={t("topbar.toggleDarkMode")}
             className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
           >
             {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -89,7 +109,7 @@ export default function TopBar() {
           {/* Bell — shows a count badge and opens the notifications panel */}
           <button
             onClick={() => setNotifOpen((v) => !v)}
-            aria-label="Notifications"
+            aria-label={t("common.notifications")}
             className={`relative p-2 rounded-xl transition-colors ${
               notifOpen ? "text-brand bg-brand-soft" : "text-ink-muted hover:text-ink hover:bg-surface-2"
             }`}
@@ -125,7 +145,7 @@ export default function TopBar() {
             )}
             <div className="hidden sm:block leading-tight">
               <p className="text-sm font-semibold text-ink truncate max-w-[120px]">{user.name}</p>
-              <p className="text-[11px] text-ink-muted">Farm Owner</p>
+              <p className="text-[11px] text-ink-muted">{t("common.farmOwner")}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-ink-faint hidden sm:block" />
           </Link>
@@ -144,9 +164,9 @@ export default function TopBar() {
           {!isOnline ? <WifiOff className="w-3.5 h-3.5" /> : <CloudUpload className="w-3.5 h-3.5" />}
           {!isOnline
             ? pendingCount > 0
-              ? `Offline · ${pendingCount} change${pendingCount === 1 ? "" : "s"} pending`
-              : "Offline — changes will save on this device"
-            : `Syncing ${pendingCount} change${pendingCount === 1 ? "" : "s"}…`}
+              ? t(pendingCount === 1 ? "topbar.offlineMobilePendingOne" : "topbar.offlineMobilePendingOther", { count: pendingCount })
+              : t("topbar.offlineMobileNoPending")
+            : t(pendingCount === 1 ? "topbar.syncingMobileOne" : "topbar.syncingMobileOther", { count: pendingCount })}
         </div>
       )}
 
@@ -158,8 +178,8 @@ export default function TopBar() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-line">
-              <span className="text-sm font-display font-semibold text-ink">Notifications</span>
-              <button onClick={() => setNotifOpen(false)} aria-label="Close" className="p-1 text-ink-faint">
+              <span className="text-sm font-display font-semibold text-ink">{t("common.notifications")}</span>
+              <button onClick={() => setNotifOpen(false)} aria-label={t("common.close")} className="p-1 text-ink-faint">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -167,7 +187,7 @@ export default function TopBar() {
             {notifications.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                 <CheckCircle2 className="w-6 h-6 text-brand" />
-                <p className="text-xs text-ink-muted">You&apos;re all caught up.</p>
+                <p className="text-xs text-ink-muted">{t("common.allCaughtUp")}</p>
               </div>
             ) : (
               <div className="divide-y divide-line">
@@ -187,7 +207,7 @@ export default function TopBar() {
                       </Link>
                       <button
                         onClick={() => dismiss(n.id)}
-                        aria-label="Dismiss"
+                        aria-label={t("common.dismiss")}
                         className="flex-shrink-0 p-1 rounded-lg text-ink-faint hover:bg-surface-2"
                       >
                         <X className="w-3.5 h-3.5" />

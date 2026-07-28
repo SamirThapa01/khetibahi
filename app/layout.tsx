@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "./context/AuthContext";
+import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 import LayoutShell from "./components/LayoutShell";
 import { InformationProvider } from "./components/Information";
 import ServiceWorkerRegister from "./components/ServiceWorkerRegister";
@@ -51,6 +52,8 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     // suppressHydrationWarning: the "dark" class is toggled client-side
+    // (and now the html lang attribute may also shift client-side once
+    // the saved language preference loads from localStorage)
     <html
       lang="en"
       suppressHydrationWarning
@@ -60,13 +63,15 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <InformationProvider>
           <AuthProvider>
-            {/*
-              LayoutShell is a Client Component that decides which chrome to
-              render:
-                - Auth pages (/login, /signup) → no sidebar, no topbar, just children
-                - App pages → sidebar + topbar + main content + mobile nav
-            */}
-            <LayoutShell>{children}</LayoutShell>
+            <LanguageProvider>
+              {/*
+                LayoutShell is a Client Component that decides which chrome to
+                render:
+                  - Auth pages (/login, /signup) → no sidebar, no topbar, just children
+                  - App pages → sidebar + topbar + main content + mobile nav
+              */}
+              <LayoutShell>{children}</LayoutShell>
+            </LanguageProvider>
           </AuthProvider>
         </InformationProvider>
       </body>
