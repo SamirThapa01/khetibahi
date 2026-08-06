@@ -7,13 +7,14 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Save, CheckCircle2, Clock3, CircleDollarSign } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { X, Save, CheckCircle2, Clock3, CircleDollarSign, AlertTriangle } from "lucide-react";
 import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
 import { SEASONS } from "@/app/utils/constants";
 import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
 import ImageUploadField from "@/app/components/ImageUploadField";
 import { useCrops } from "@/app/hooks/useCrops";
+import { useTodayEntries } from "@/app/hooks/useTodayEntries";
 
 const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
 
@@ -21,6 +22,9 @@ interface IncomeFormProps {
   onSubmit: (data: IncomeFormData) => void;
   onCancel: () => void;
   initialData?: IncomeFormData;
+  /** The record's own id when editing — excluded from the duplicate check
+   *  so an existing sale never flags itself as a duplicate of itself. */
+  editingId?: string;
 }
 
 const EMPTY: IncomeFormData = {
@@ -33,7 +37,7 @@ const EMPTY: IncomeFormData = {
   note: "",
 };
 
-export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFormProps) {
+export default function IncomeForm({ onSubmit, onCancel, initialData, editingId }: IncomeFormProps) {
   const [form, setForm] = useState<IncomeFormData>(initialData ?? EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof IncomeFormData, string>>>({});
   const { crops, addCrop } = useCrops();
@@ -75,6 +79,37 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
   const total = form.quantityKg * form.ratePerKg;
   const due = Math.max(total - form.amountPaid, 0);
 
+  // ── Duplicate check ─────────────────────────
+  // Looks only at sales already logged for the SAME date picked above
+  // (never the farmer's whole history) — this is what catches "someone
+  // else at home already logged this exact sale this morning."
+  // A match requires buyer, kg sold, AND rate per kg to all agree;
+  // that combination is specific enough that two family members
+  // logging the same real sale twice is far more likely than two
+  // genuinely different sales happening to match on all three.
+  const { income: todayIncome } = useTodayEntries(form.date || todayISO());
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
+
+  const duplicateMatch = useMemo(() => {
+    const buyer = form.buyer.trim().toLowerCase();
+    if (!buyer || form.quantityKg <= 0 || form.ratePerKg <= 0) return null;
+    return (
+      todayIncome.find(
+        (e) =>
+          e.id !== editingId &&
+          e.buyer.trim().toLowerCase() === buyer &&
+          e.quantityKg === form.quantityKg &&
+          e.ratePerKg === form.ratePerKg
+      ) ?? null
+    );
+  }, [todayIncome, form.buyer, form.quantityKg, form.ratePerKg, editingId]);
+
+  // Any change to the fields that define "duplicate" un-confirms it,
+  // so the checkbox can't silently carry over to a different sale.
+  useEffect(() => {
+    setDuplicateConfirmed(false);
+  }, [form.date, form.buyer, form.quantityKg, form.ratePerKg]);
+
   function validate(): boolean {
     const e: typeof errors = {};
     if (!form.date) e.date = "Date is required";
@@ -89,7 +124,9 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (validate()) onSubmit(form);
+    if (!validate()) return;
+    if (duplicateMatch && !duplicateConfirmed) return; // blocked — checkbox below must be ticked first
+    onSubmit(form);
   }
 
   function set<K extends keyof IncomeFormData>(key: K, value: IncomeFormData[K]) {
@@ -384,6 +421,30 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
             onChange={(dataUrl) => set("billImage", dataUrl)}
           />
 
+          {/* Possible duplicate warning — same date, same buyer, same kg, same rate */}
+          {duplicateMatch && (
+            <div className="bg-accent-soft border border-accent/30 rounded-xl p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-ink">
+                  <span className="font-semibold">Possible duplicate.</span> A sale of{" "}
+                  {form.quantityKg}kg to <span className="font-medium">{form.buyer}</span> at ₹
+                  {form.ratePerKg}/kg is already logged for {form.date}. If someone else at home
+                  already recorded this, adding it again will double-count it.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-ink-muted pl-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={duplicateConfirmed}
+                  onChange={(e) => setDuplicateConfirmed(e.target.checked)}
+                  className="rounded border-line"
+                />
+                This is a separate, real sale — log it anyway
+              </label>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
@@ -395,7 +456,8 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
             </button>
             <button
               type="submit"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
+              disabled={!!duplicateMatch && !duplicateConfirmed}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               <Save className="w-4 h-4" />
               {initialData ? "Save Changes" : "Log Sale"}

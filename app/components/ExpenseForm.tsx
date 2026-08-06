@@ -6,13 +6,14 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, Save } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { X, Save, AlertTriangle } from "lucide-react";
 import { ExpenseFormData } from "@/app/types";
 import { CATEGORIES, SEASONS } from "@/app/utils/constants";
 import { todayISO } from "@/app/utils/helpers";
 import ImageUploadField from "@/app/components/ImageUploadField";
 import { useCrops } from "@/app/hooks/useCrops";
+import { useTodayEntries } from "@/app/hooks/useTodayEntries";
 
 const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
 
@@ -20,6 +21,9 @@ interface ExpenseFormProps {
   onSubmit: (data: ExpenseFormData) => void;
   onCancel: () => void;
   initialData?: ExpenseFormData;
+  /** The record's own id when editing — excluded from the duplicate check
+   *  so an existing expense never flags itself as a duplicate of itself. */
+  editingId?: string;
 }
 
 const EMPTY: ExpenseFormData = {
@@ -31,7 +35,7 @@ const EMPTY: ExpenseFormData = {
   season: ""
 };
 
-export default function ExpenseForm({ onSubmit, onCancel, initialData }: ExpenseFormProps) {
+export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId }: ExpenseFormProps) {
   const [form, setForm] = useState<ExpenseFormData>(initialData ?? EMPTY);
   const [errors, setErrors] = useState<Partial<Record<keyof ExpenseFormData, string>>>({});
   const { crops, addCrop } = useCrops();
@@ -60,6 +64,32 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
     if (initialData) setForm(initialData);
   }, [initialData]);
 
+  // ── Duplicate check ─────────────────────────
+  // Looks only at expenses already logged for the SAME date picked above
+  // (never the farmer's whole history) — catches "someone else at home
+  // already logged this exact expense today." A match requires category,
+  // crop, AND amount to all agree.
+  const { expenses: todayExpenses } = useTodayEntries(form.date || todayISO());
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
+
+  const duplicateMatch = useMemo(() => {
+    if (form.amount <= 0) return null;
+    return (
+      todayExpenses.find(
+        (e) =>
+          e.id !== editingId &&
+          e.category === form.category &&
+          e.crop === form.crop &&
+          e.amount === form.amount
+      ) ?? null
+    );
+  }, [todayExpenses, form.category, form.crop, form.amount, editingId]);
+
+  // Any change to the fields that define "duplicate" un-confirms it.
+  useEffect(() => {
+    setDuplicateConfirmed(false);
+  }, [form.date, form.category, form.crop, form.amount]);
+
   function validate(): boolean {
     const e: typeof errors = {};
     if (!form.date)           e.date     = "Date is required";
@@ -70,7 +100,9 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (validate()) onSubmit(form);
+    if (!validate()) return;
+    if (duplicateMatch && !duplicateConfirmed) return; // blocked — checkbox below must be ticked first
+    onSubmit(form);
   }
 
   function set<K extends keyof ExpenseFormData>(key: K, value: ExpenseFormData[K]) {
@@ -263,6 +295,31 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
             onChange={(dataUrl) => set("billImage", dataUrl)}
           />
 
+          {/* Possible duplicate warning — same date, same category, same crop, same amount */}
+          {duplicateMatch && (
+            <div className="bg-accent-soft border border-accent/30 rounded-xl p-3 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-ink">
+                  <span className="font-semibold">Possible duplicate.</span> A{" "}
+                  <span className="font-medium">{form.category}</span> expense of ₹{form.amount}
+                  {form.crop !== "All Crops" ? ` for ${form.crop}` : ""} is already logged for{" "}
+                  {form.date}. If someone else at home already recorded this, adding it again
+                  will double-count it.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-ink-muted pl-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={duplicateConfirmed}
+                  onChange={(e) => setDuplicateConfirmed(e.target.checked)}
+                  className="rounded border-line"
+                />
+                This is a separate, real expense — add it anyway
+              </label>
+            </div>
+          )}
+
           {/* Actions */}
           <div className="flex gap-3 pt-2">
             <button
@@ -274,7 +331,8 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
             </button>
             <button
               type="submit"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
+              disabled={!!duplicateMatch && !duplicateConfirmed}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
             >
               <Save className="w-4 h-4" />
               {initialData ? "Save Changes" : "Add Expense"}

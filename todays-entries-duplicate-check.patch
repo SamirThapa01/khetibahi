@@ -1,0 +1,637 @@
+diff --git a/app/api/entries/today/route.ts b/app/api/entries/today/route.ts
+new file mode 100644
+index 0000000..6d05c1e
+--- /dev/null
++++ b/app/api/entries/today/route.ts
+@@ -0,0 +1,89 @@
++// ─────────────────────────────────────────────
++//  /api/entries/today
++//  GET → every income (sale) + expense record the logged-in user has
++//        for ONE date (defaults to today), newest first.
++//
++//  Why this exists as its own endpoint instead of reusing /api/income
++//  and /api/expenses: those two return the farmer's ENTIRE history
++//  (every sale/expense ever), which is what the dashboard totals and
++//  Analytics need. Two different jobs use this endpoint instead:
++//
++//   1. Dashboard "Today's Entries" widget — so whoever in the family
++//      opens the app can see at a glance what's already been logged
++//      today, by crop/category and buyer, before adding anything new.
++//   2. The Add Sale / Add Expense forms' duplicate check — they call
++//      this with whatever date is selected in the form (not just
++//      today) to check "has this exact entry already been logged for
++//      THIS date?" without ever pulling in the full history.
++//
++//  Scoped to userId like everything else — since the whole family
++//  shares one login for the farm account, this naturally shows every
++//  family member's entries for the day, not just whoever is looking
++//  at the screen right now.
++// ─────────────────────────────────────────────
++
++import { NextRequest, NextResponse } from "next/server";
++import { dbConnect } from "@/lib/mongodb";
++import { Income, type IIncome } from "@/models/Income";
++import { Expense, type IExpense } from "@/models/Expense";
++import { getCurrentUser } from "@/lib/session";
++import { HydratedDocument } from "mongoose";
++
++function serializeIncome(doc: HydratedDocument<IIncome>) {
++  return {
++    id: doc._id.toString(),
++    date: doc.date,
++    crop: doc.crop,
++    buyer: doc.buyer,
++    quantityKg: doc.quantityKg,
++    ratePerKg: doc.ratePerKg,
++    amountPaid: doc.amountPaid,
++    note: doc.note,
++    createdAt: doc.createdAt.toISOString(),
++  };
++}
++
++function serializeExpense(doc: HydratedDocument<IExpense>) {
++  return {
++    id: doc._id.toString(),
++    date: doc.date,
++    category: doc.category,
++    crop: doc.crop,
++    amount: doc.amount,
++    note: doc.note,
++    createdAt: doc.createdAt.toISOString(),
++  };
++}
++
++/** "YYYY-MM-DD" in the server's local time — same format the app stores `date` as. */
++function todayISO(): string {
++  const now = new Date();
++  const y = now.getFullYear();
++  const m = String(now.getMonth() + 1).padStart(2, "0");
++  const d = String(now.getDate()).padStart(2, "0");
++  return `${y}-${m}-${d}`;
++}
++
++export async function GET(req: NextRequest) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  const { searchParams } = new URL(req.url);
++  // Accept whatever date the caller asks for (e.g. the date picked in a
++  // form that isn't "today"), but always fall back to today.
++  const dateParam = searchParams.get("date");
++  const date = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : todayISO();
++
++  await dbConnect();
++
++  const [income, expenses] = await Promise.all([
++    Income.find({ userId: user.userId, date }).sort({ createdAt: -1 }),
++    Expense.find({ userId: user.userId, date }).sort({ createdAt: -1 }),
++  ]);
++
++  return NextResponse.json({
++    date,
++    income: income.map(serializeIncome),
++    expenses: expenses.map(serializeExpense),
++  });
++}
+diff --git a/app/components/ExpenseForm.tsx b/app/components/ExpenseForm.tsx
+index 677a428..88e92c8 100644
+--- a/app/components/ExpenseForm.tsx
++++ b/app/components/ExpenseForm.tsx
+@@ -6,13 +6,14 @@
+ 
+ "use client";
+ 
+-import { useState, useEffect } from "react";
+-import { X, Save } from "lucide-react";
++import { useState, useEffect, useMemo } from "react";
++import { X, Save, AlertTriangle } from "lucide-react";
+ import { ExpenseFormData } from "@/app/types";
+ import { CATEGORIES, SEASONS } from "@/app/utils/constants";
+ import { todayISO } from "@/app/utils/helpers";
+ import ImageUploadField from "@/app/components/ImageUploadField";
+ import { useCrops } from "@/app/hooks/useCrops";
++import { useTodayEntries } from "@/app/hooks/useTodayEntries";
+ 
+ const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
+ 
+@@ -20,6 +21,9 @@ interface ExpenseFormProps {
+   onSubmit: (data: ExpenseFormData) => void;
+   onCancel: () => void;
+   initialData?: ExpenseFormData;
++  /** The record's own id when editing — excluded from the duplicate check
++   *  so an existing expense never flags itself as a duplicate of itself. */
++  editingId?: string;
+ }
+ 
+ const EMPTY: ExpenseFormData = {
+@@ -31,7 +35,7 @@ const EMPTY: ExpenseFormData = {
+   season: ""
+ };
+ 
+-export default function ExpenseForm({ onSubmit, onCancel, initialData }: ExpenseFormProps) {
++export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId }: ExpenseFormProps) {
+   const [form, setForm] = useState<ExpenseFormData>(initialData ?? EMPTY);
+   const [errors, setErrors] = useState<Partial<Record<keyof ExpenseFormData, string>>>({});
+   const { crops, addCrop } = useCrops();
+@@ -60,6 +64,32 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
+     if (initialData) setForm(initialData);
+   }, [initialData]);
+ 
++  // ── Duplicate check ─────────────────────────
++  // Looks only at expenses already logged for the SAME date picked above
++  // (never the farmer's whole history) — catches "someone else at home
++  // already logged this exact expense today." A match requires category,
++  // crop, AND amount to all agree.
++  const { expenses: todayExpenses } = useTodayEntries(form.date || todayISO());
++  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
++
++  const duplicateMatch = useMemo(() => {
++    if (form.amount <= 0) return null;
++    return (
++      todayExpenses.find(
++        (e) =>
++          e.id !== editingId &&
++          e.category === form.category &&
++          e.crop === form.crop &&
++          e.amount === form.amount
++      ) ?? null
++    );
++  }, [todayExpenses, form.category, form.crop, form.amount, editingId]);
++
++  // Any change to the fields that define "duplicate" un-confirms it.
++  useEffect(() => {
++    setDuplicateConfirmed(false);
++  }, [form.date, form.category, form.crop, form.amount]);
++
+   function validate(): boolean {
+     const e: typeof errors = {};
+     if (!form.date)           e.date     = "Date is required";
+@@ -70,7 +100,9 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
+ 
+   function handleSubmit(e: React.FormEvent) {
+     e.preventDefault();
+-    if (validate()) onSubmit(form);
++    if (!validate()) return;
++    if (duplicateMatch && !duplicateConfirmed) return; // blocked — checkbox below must be ticked first
++    onSubmit(form);
+   }
+ 
+   function set<K extends keyof ExpenseFormData>(key: K, value: ExpenseFormData[K]) {
+@@ -263,6 +295,31 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
+             onChange={(dataUrl) => set("billImage", dataUrl)}
+           />
+ 
++          {/* Possible duplicate warning — same date, same category, same crop, same amount */}
++          {duplicateMatch && (
++            <div className="bg-accent-soft border border-accent/30 rounded-xl p-3 space-y-2">
++              <div className="flex items-start gap-2">
++                <AlertTriangle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
++                <p className="text-xs text-ink">
++                  <span className="font-semibold">Possible duplicate.</span> A{" "}
++                  <span className="font-medium">{form.category}</span> expense of ₹{form.amount}
++                  {form.crop !== "All Crops" ? ` for ${form.crop}` : ""} is already logged for{" "}
++                  {form.date}. If someone else at home already recorded this, adding it again
++                  will double-count it.
++                </p>
++              </div>
++              <label className="flex items-center gap-2 text-xs text-ink-muted pl-6 cursor-pointer">
++                <input
++                  type="checkbox"
++                  checked={duplicateConfirmed}
++                  onChange={(e) => setDuplicateConfirmed(e.target.checked)}
++                  className="rounded border-line"
++                />
++                This is a separate, real expense — add it anyway
++              </label>
++            </div>
++          )}
++
+           {/* Actions */}
+           <div className="flex gap-3 pt-2">
+             <button
+@@ -274,7 +331,8 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData }: Expense
+             </button>
+             <button
+               type="submit"
+-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
++              disabled={!!duplicateMatch && !duplicateConfirmed}
++              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+             >
+               <Save className="w-4 h-4" />
+               {initialData ? "Save Changes" : "Add Expense"}
+diff --git a/app/components/IncomeForm.tsx b/app/components/IncomeForm.tsx
+index 3bdd35e..4b6a80a 100644
+--- a/app/components/IncomeForm.tsx
++++ b/app/components/IncomeForm.tsx
+@@ -7,13 +7,14 @@
+ 
+ "use client";
+ 
+-import { useState, useEffect } from "react";
+-import { X, Save, CheckCircle2, Clock3, CircleDollarSign } from "lucide-react";
++import { useState, useEffect, useMemo } from "react";
++import { X, Save, CheckCircle2, Clock3, CircleDollarSign, AlertTriangle } from "lucide-react";
+ import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
+ import { SEASONS } from "@/app/utils/constants";
+ import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
+ import ImageUploadField from "@/app/components/ImageUploadField";
+ import { useCrops } from "@/app/hooks/useCrops";
++import { useTodayEntries } from "@/app/hooks/useTodayEntries";
+ 
+ const COMMON_EMOJIS = ["🍅","🥔","🥦","🧅","🥬","🌿","🌱","🫛","🌶️","🥒","🎃","🍆","🥕","🌽","🧄"];
+ 
+@@ -21,6 +22,9 @@ interface IncomeFormProps {
+   onSubmit: (data: IncomeFormData) => void;
+   onCancel: () => void;
+   initialData?: IncomeFormData;
++  /** The record's own id when editing — excluded from the duplicate check
++   *  so an existing sale never flags itself as a duplicate of itself. */
++  editingId?: string;
+ }
+ 
+ const EMPTY: IncomeFormData = {
+@@ -33,7 +37,7 @@ const EMPTY: IncomeFormData = {
+   note: "",
+ };
+ 
+-export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFormProps) {
++export default function IncomeForm({ onSubmit, onCancel, initialData, editingId }: IncomeFormProps) {
+   const [form, setForm] = useState<IncomeFormData>(initialData ?? EMPTY);
+   const [errors, setErrors] = useState<Partial<Record<keyof IncomeFormData, string>>>({});
+   const { crops, addCrop } = useCrops();
+@@ -75,6 +79,37 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
+   const total = form.quantityKg * form.ratePerKg;
+   const due = Math.max(total - form.amountPaid, 0);
+ 
++  // ── Duplicate check ─────────────────────────
++  // Looks only at sales already logged for the SAME date picked above
++  // (never the farmer's whole history) — this is what catches "someone
++  // else at home already logged this exact sale this morning."
++  // A match requires buyer, kg sold, AND rate per kg to all agree;
++  // that combination is specific enough that two family members
++  // logging the same real sale twice is far more likely than two
++  // genuinely different sales happening to match on all three.
++  const { income: todayIncome } = useTodayEntries(form.date || todayISO());
++  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
++
++  const duplicateMatch = useMemo(() => {
++    const buyer = form.buyer.trim().toLowerCase();
++    if (!buyer || form.quantityKg <= 0 || form.ratePerKg <= 0) return null;
++    return (
++      todayIncome.find(
++        (e) =>
++          e.id !== editingId &&
++          e.buyer.trim().toLowerCase() === buyer &&
++          e.quantityKg === form.quantityKg &&
++          e.ratePerKg === form.ratePerKg
++      ) ?? null
++    );
++  }, [todayIncome, form.buyer, form.quantityKg, form.ratePerKg, editingId]);
++
++  // Any change to the fields that define "duplicate" un-confirms it,
++  // so the checkbox can't silently carry over to a different sale.
++  useEffect(() => {
++    setDuplicateConfirmed(false);
++  }, [form.date, form.buyer, form.quantityKg, form.ratePerKg]);
++
+   function validate(): boolean {
+     const e: typeof errors = {};
+     if (!form.date) e.date = "Date is required";
+@@ -89,7 +124,9 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
+ 
+   function handleSubmit(e: React.FormEvent) {
+     e.preventDefault();
+-    if (validate()) onSubmit(form);
++    if (!validate()) return;
++    if (duplicateMatch && !duplicateConfirmed) return; // blocked — checkbox below must be ticked first
++    onSubmit(form);
+   }
+ 
+   function set<K extends keyof IncomeFormData>(key: K, value: IncomeFormData[K]) {
+@@ -384,6 +421,30 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
+             onChange={(dataUrl) => set("billImage", dataUrl)}
+           />
+ 
++          {/* Possible duplicate warning — same date, same buyer, same kg, same rate */}
++          {duplicateMatch && (
++            <div className="bg-accent-soft border border-accent/30 rounded-xl p-3 space-y-2">
++              <div className="flex items-start gap-2">
++                <AlertTriangle className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
++                <p className="text-xs text-ink">
++                  <span className="font-semibold">Possible duplicate.</span> A sale of{" "}
++                  {form.quantityKg}kg to <span className="font-medium">{form.buyer}</span> at ₹
++                  {form.ratePerKg}/kg is already logged for {form.date}. If someone else at home
++                  already recorded this, adding it again will double-count it.
++                </p>
++              </div>
++              <label className="flex items-center gap-2 text-xs text-ink-muted pl-6 cursor-pointer">
++                <input
++                  type="checkbox"
++                  checked={duplicateConfirmed}
++                  onChange={(e) => setDuplicateConfirmed(e.target.checked)}
++                  className="rounded border-line"
++                />
++                This is a separate, real sale — log it anyway
++              </label>
++            </div>
++          )}
++
+           {/* Actions */}
+           <div className="flex gap-3 pt-2">
+             <button
+@@ -395,7 +456,8 @@ export default function IncomeForm({ onSubmit, onCancel, initialData }: IncomeFo
+             </button>
+             <button
+               type="submit"
+-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark text-white text-sm font-semibold transition-colors"
++              disabled={!!duplicateMatch && !duplicateConfirmed}
++              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors"
+             >
+               <Save className="w-4 h-4" />
+               {initialData ? "Save Changes" : "Log Sale"}
+diff --git a/app/components/TodayEntries.tsx b/app/components/TodayEntries.tsx
+new file mode 100644
+index 0000000..059c0fd
+--- /dev/null
++++ b/app/components/TodayEntries.tsx
+@@ -0,0 +1,135 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – TodayEntries
++//  Dashboard widget: "what has already been logged today,
++//  by anyone in the family, before you add anything new."
++//  Merges today's sales + expenses into one timeline, newest first.
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { CalendarCheck2, Coins, Wallet, RefreshCw } from "lucide-react";
++import { format, parseISO } from "date-fns";
++import { formatNPR } from "@/app/utils/helpers";
++import { CATEGORIES, CROPS } from "@/app/utils/constants";
++import { useTodayEntries, TodayIncomeEntry, TodayExpenseEntry } from "@/app/hooks/useTodayEntries";
++
++function cropEmoji(crop: string) {
++  return CROPS.find((c) => c.value === crop)?.emoji ?? "🌱";
++}
++
++function categoryMeta(category: string) {
++  return CATEGORIES.find((c) => c.value === category);
++}
++
++function timeOf(iso: string) {
++  try {
++    return format(parseISO(iso), "h:mm a");
++  } catch {
++    return "";
++  }
++}
++
++type Row =
++  | { kind: "income"; entry: TodayIncomeEntry }
++  | { kind: "expense"; entry: TodayExpenseEntry };
++
++interface TodayEntriesProps {
++  /** Bump this (e.g. a counter) right after adding a sale/expense elsewhere on the
++   *  page to make this widget refetch without needing a full page reload. */
++  refreshSignal?: number;
++}
++
++export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
++  const { income, expenses, loading, error, refetch } = useTodayEntries(undefined, refreshSignal);
++
++  const rows: Row[] = [
++    ...income.map((entry): Row => ({ kind: "income", entry })),
++    ...expenses.map((entry): Row => ({ kind: "expense", entry })),
++  ].sort((a, b) => new Date(b.entry.createdAt).getTime() - new Date(a.entry.createdAt).getTime());
++
++  return (
++    <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
++      <div className="flex items-center justify-between mb-3">
++        <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
++          <CalendarCheck2 className="w-4 h-4 text-brand" />
++          Today&apos;s Entries
++        </h3>
++        <button
++          onClick={() => refetch()}
++          disabled={loading}
++          className="text-ink-faint hover:text-brand transition-colors disabled:opacity-50"
++          title="Refresh"
++        >
++          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
++        </button>
++      </div>
++
++      {error && <p className="text-sm text-negative">{error}</p>}
++
++      {!error && !loading && rows.length === 0 && (
++        <p className="text-sm text-ink-muted">
++          Nothing logged today yet — the first sale or expense you add will show up here for
++          everyone at home to see.
++        </p>
++      )}
++
++      {!error && rows.length > 0 && (
++        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
++          {rows.map((row) =>
++            row.kind === "income" ? (
++              <div
++                key={`inc-${row.entry.id}`}
++                className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0"
++              >
++                <div className="flex items-center gap-2 min-w-0">
++                  <span className="text-base flex-shrink-0">{cropEmoji(row.entry.crop)}</span>
++                  <div className="min-w-0">
++                    <p className="text-ink font-medium truncate">
++                      {row.entry.quantityKg}kg {row.entry.crop} sold to {row.entry.buyer}
++                    </p>
++                    <p className="text-ink-faint text-xs">
++                      {timeOf(row.entry.createdAt)} · ₹{row.entry.ratePerKg}/kg
++                    </p>
++                  </div>
++                </div>
++                <span className="flex items-center gap-1 font-semibold text-brand tabular-nums flex-shrink-0 ml-2">
++                  <Coins className="w-3 h-3" />
++                  {formatNPR(row.entry.quantityKg * row.entry.ratePerKg)}
++                </span>
++              </div>
++            ) : (
++              <div
++                key={`exp-${row.entry.id}`}
++                className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0"
++              >
++                <div className="flex items-center gap-2 min-w-0">
++                  <span className="text-base flex-shrink-0">
++                    {categoryMeta(row.entry.category)?.emoji ?? "🧾"}
++                  </span>
++                  <div className="min-w-0">
++                    <p className="text-ink font-medium truncate">
++                      {row.entry.category}
++                      {row.entry.crop !== "All Crops" ? ` · ${row.entry.crop}` : ""}
++                    </p>
++                    <p className="text-ink-faint text-xs">{timeOf(row.entry.createdAt)}</p>
++                  </div>
++                </div>
++                <span className="flex items-center gap-1 font-semibold text-negative tabular-nums flex-shrink-0 ml-2">
++                  <Wallet className="w-3 h-3" />
++                  {formatNPR(row.entry.amount)}
++                </span>
++              </div>
++            )
++          )}
++        </div>
++      )}
++
++      {!error && rows.length > 0 && (
++        <p className="text-xs text-ink-faint mt-3">
++          {rows.length} {rows.length === 1 ? "entry" : "entries"} logged today — check here before
++          adding a new one to avoid recording the same sale or expense twice.
++        </p>
++      )}
++    </div>
++  );
++}
+diff --git a/app/expenses/page.tsx b/app/expenses/page.tsx
+index 3a7ed07..46e47ac 100644
+--- a/app/expenses/page.tsx
++++ b/app/expenses/page.tsx
+@@ -368,6 +368,7 @@ export default function ExpensesPage() {
+         <ExpenseForm
+           onSubmit={handleSubmit}
+           onCancel={handleCancel}
++          editingId={editing?.id}
+           initialData={
+             editing
+               ? {
+diff --git a/app/hooks/useTodayEntries.ts b/app/hooks/useTodayEntries.ts
+new file mode 100644
+index 0000000..5c1ac31
+--- /dev/null
++++ b/app/hooks/useTodayEntries.ts
+@@ -0,0 +1,74 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – useTodayEntries Hook
++//
++//  Thin wrapper around GET /api/entries/today. Two callers:
++//   - Dashboard's "Today's Entries" widget (no `date` → defaults to today,
++//     refetches on an interval + exposes `refetch` for right after an add).
++//   - IncomeForm / ExpenseForm's duplicate check (pass the form's own
++//     `date`, refetch whenever that date changes).
++// ─────────────────────────────────────────────
++
++"use client";
++
++import { useState, useEffect, useCallback, useRef } from "react";
++
++export interface TodayIncomeEntry {
++  id: string;
++  date: string;
++  crop: string;
++  buyer: string;
++  quantityKg: number;
++  ratePerKg: number;
++  amountPaid: number;
++  note: string;
++  createdAt: string;
++}
++
++export interface TodayExpenseEntry {
++  id: string;
++  date: string;
++  category: string;
++  crop: string;
++  amount: number;
++  note: string;
++  createdAt: string;
++}
++
++export function useTodayEntries(date?: string, refreshSignal?: number) {
++  const [income, setIncome] = useState<TodayIncomeEntry[]>([]);
++  const [expenses, setExpenses] = useState<TodayExpenseEntry[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  // Avoids setting state from a stale, slower request that resolves
++  // after a newer one (e.g. the user flips the date field twice fast).
++  const requestId = useRef(0);
++
++  const load = useCallback(async () => {
++    const id = ++requestId.current;
++    setLoading(true);
++    try {
++      const qs = date ? `?date=${encodeURIComponent(date)}` : "";
++      const res = await fetch(`/api/entries/today${qs}`);
++      if (!res.ok) throw new Error("Could not load today's entries.");
++      const data: { income: TodayIncomeEntry[]; expenses: TodayExpenseEntry[] } = await res.json();
++      if (id !== requestId.current) return; // superseded by a newer request
++      setIncome(data.income);
++      setExpenses(data.expenses);
++      setError(null);
++    } catch (err) {
++      if (id !== requestId.current) return;
++      console.error(err);
++      setError("Could not load today's entries.");
++    } finally {
++      if (id === requestId.current) setLoading(false);
++    }
++  }, [date]);
++
++  useEffect(() => {
++    load();
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [load, refreshSignal]);
++
++  return { income, expenses, loading, error, refetch: load };
++}
+diff --git a/app/income/page.tsx b/app/income/page.tsx
+index 6c4889c..7682bfa 100644
+--- a/app/income/page.tsx
++++ b/app/income/page.tsx
+@@ -397,6 +397,7 @@ export default function IncomePage() {
+         <IncomeForm
+           onSubmit={handleSubmit}
+           onCancel={handleCancel}
++          editingId={editing?.id}
+           initialData={
+             editing
+               ? {
+diff --git a/app/page.tsx b/app/page.tsx
+index fc3cf05..e70a1f9 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -24,6 +24,7 @@ import { useBudgets } from "@/app/hooks/useBudgets";
+ import { useRecurringExpenses } from "@/app/hooks/useRecurringExpenses";
+ import BudgetProgress from "@/app/components/BudgetProgress";
+ import { DashboardSkeleton } from "@/app/components/Skeleton";
++import TodayEntries from "@/app/components/TodayEntries";
+ 
+ 
+ export default function DashboardPage() {
+@@ -41,6 +42,9 @@ export default function DashboardPage() {
+  const { items: recurringItems, loading: recurringLoading } = useRecurringExpenses();
+ 
+   const [showForm, setShowForm] = useState(false);
++  // Bumped after adding an expense here so the "Today's Entries" widget
++  // refetches immediately instead of waiting for a page reload.
++  const [todayRefresh, setTodayRefresh] = useState(0);
+ 
+   // This month's total (for the "this month" stat card)
+   const thisMonthKey = format(new Date(), "yyyy-MM");
+@@ -73,6 +77,7 @@ export default function DashboardPage() {
+   function handleAdd(data: ExpenseFormData) {
+     addExpense(data);
+     setShowForm(false);
++    setTodayRefresh((n) => n + 1);
+   }
+ 
+   if (!isLoaded || !incomeLoaded) {
+@@ -105,6 +110,10 @@ export default function DashboardPage() {
+         </div>
+       </div>
+ 
++      {/* Today's entries — what's already been logged today, by anyone
++          in the family, so the next person doesn't record it twice. */}
++      <TodayEntries refreshSignal={todayRefresh} />
++
+       {/* Empty state */}
+       {!hasAnyData && (
+         <div className="bg-surface rounded-2xl border border-dashed border-line p-10 text-center">

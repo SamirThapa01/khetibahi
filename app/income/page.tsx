@@ -397,6 +397,7 @@ export default function IncomePage() {
         <IncomeForm
           onSubmit={handleSubmit}
           onCancel={handleCancel}
+          editingId={editing?.id}
           initialData={
             editing
               ? {

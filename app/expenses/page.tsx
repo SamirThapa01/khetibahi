@@ -368,6 +368,7 @@ export default function ExpensesPage() {
         <ExpenseForm
           onSubmit={handleSubmit}
           onCancel={handleCancel}
+          editingId={editing?.id}
           initialData={
             editing
               ? {

@@ -24,6 +24,7 @@ import { useBudgets } from "@/app/hooks/useBudgets";
 import { useRecurringExpenses } from "@/app/hooks/useRecurringExpenses";
 import BudgetProgress from "@/app/components/BudgetProgress";
 import { DashboardSkeleton } from "@/app/components/Skeleton";
+import TodayEntries from "@/app/components/TodayEntries";
 
 
 export default function DashboardPage() {
@@ -41,6 +42,9 @@ export default function DashboardPage() {
  const { items: recurringItems, loading: recurringLoading } = useRecurringExpenses();
 
   const [showForm, setShowForm] = useState(false);
+  // Bumped after adding an expense here so the "Today's Entries" widget
+  // refetches immediately instead of waiting for a page reload.
+  const [todayRefresh, setTodayRefresh] = useState(0);
 
   // This month's total (for the "this month" stat card)
   const thisMonthKey = format(new Date(), "yyyy-MM");
@@ -73,6 +77,7 @@ export default function DashboardPage() {
   function handleAdd(data: ExpenseFormData) {
     addExpense(data);
     setShowForm(false);
+    setTodayRefresh((n) => n + 1);
   }
 
   if (!isLoaded || !incomeLoaded) {
@@ -104,6 +109,10 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* Today's entries — what's already been logged today, by anyone
+          in the family, so the next person doesn't record it twice. */}
+      <TodayEntries refreshSignal={todayRefresh} />
 
       {/* Empty state */}
       {!hasAnyData && (
