@@ -11,7 +11,7 @@ import { useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Income } from "@/app/types";
 import { CROPS } from "@/app/utils/constants";
-import { formatNPR, prettyDate } from "@/app/utils/helpers";
+import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
 import ImageLightbox from "@/app/components/ImageLightbox";
 
 interface IncomeRowProps {
@@ -80,7 +80,7 @@ export default function IncomeRow({ income, onEdit, onDelete }: IncomeRowProps) 
           Sold to <span className="font-medium text-ink">{income.buyer}</span>
           {income.note && ` · ${income.note}`}
         </p>
-        <p className="text-xs text-ink-faint mt-0.5">{prettyDate(income.date)}</p>
+        <p className="text-xs text-ink-faint mt-0.5">{prettyDateWithBS(income.date)}</p>
       </div>
 
       <div className="text-right flex-shrink-0">

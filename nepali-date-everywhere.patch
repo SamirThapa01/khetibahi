@@ -1,0 +1,254 @@
+diff --git a/app/analytics/page.tsx b/app/analytics/page.tsx
+index 4f0275a..1545a07 100644
+--- a/app/analytics/page.tsx
++++ b/app/analytics/page.tsx
+@@ -15,7 +15,7 @@ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
+ import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
+ import { CROPS } from "@/app/utils/constants";
+-import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDate } from "@/app/utils/helpers";
++import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDateWithBS } from "@/app/utils/helpers";
+ import { CropType } from "@/app/types";
+ import { AnalyticsSkeleton } from "@/app/components/Skeleton";
+ 
+@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
+                       {crop?.emoji} {b.buyer}
+                     </p>
+                     <p className="text-xs text-ink-muted">
+-                      {b.crop} · {b.saleCount} sale{b.saleCount === 1 ? "" : "s"} · since {prettyDate(b.oldestDueDate)}
++                      {b.crop} · {b.saleCount} sale{b.saleCount === 1 ? "" : "s"} · since {prettyDateWithBS(b.oldestDueDate)}
+                     </p>
+                   </div>
+                   <p className="text-sm font-bold text-negative tabular-nums flex-shrink-0">
+diff --git a/app/components/BuyerHistoryModal.tsx b/app/components/BuyerHistoryModal.tsx
+index fb21f1d..db8466e 100644
+--- a/app/components/BuyerHistoryModal.tsx
++++ b/app/components/BuyerHistoryModal.tsx
+@@ -10,7 +10,7 @@
+ 
+ import { useState, useEffect, useCallback } from "react";
+ import { X, Search, User, Package, Loader2, Inbox } from "lucide-react";
+-import { formatNPR, prettyDate } from "@/app/utils/helpers";
++import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
+ import { CROPS } from "@/app/utils/constants";
+ 
+ interface BuyerRecord {
+@@ -206,7 +206,7 @@ export default function BuyerHistoryModal({ onClose }: BuyerHistoryModalProps) {
+                                 <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-soft text-brand whitespace-nowrap">
+                                   {cropMeta?.emoji} {r.crop}
+                                 </span>
+-                                <span className="text-xs text-ink-faint tabular-nums">{prettyDate(r.date)}</span>
++                                <span className="text-xs text-ink-faint tabular-nums">{prettyDateWithBS(r.date)}</span>
+                               </div>
+                               <p className="text-xs text-ink-muted mt-1 flex items-center gap-1">
+                                 <Package className="w-3 h-3" />
+diff --git a/app/components/CropBuyerHistoryModal.tsx b/app/components/CropBuyerHistoryModal.tsx
+index 9caaaea..01df01e 100644
+--- a/app/components/CropBuyerHistoryModal.tsx
++++ b/app/components/CropBuyerHistoryModal.tsx
+@@ -17,7 +17,7 @@
+ 
+ import { useState, useEffect, useCallback } from "react";
+ import { X, Search, User, Package, Loader2, Inbox, FileDown } from "lucide-react";
+-import { formatNPR, prettyDate } from "@/app/utils/helpers";
++import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
+ import { exportBuyerHistoryToPDF, type BuyerHistoryRecord, type BuyerHistorySummary } from "@/app/utils/pdfExport";
+ 
+ interface CropBuyerHistoryModalProps {
+@@ -209,7 +209,7 @@ export default function CropBuyerHistoryModal({ crop, cropLabel, onClose }: Crop
+                       <div key={r.id} className="px-4 py-3">
+                         <div className="flex items-start justify-between gap-3">
+                           <div className="min-w-0">
+-                            <span className="text-xs text-ink-faint tabular-nums">{prettyDate(r.date)}</span>
++                            <span className="text-xs text-ink-faint tabular-nums">{prettyDateWithBS(r.date)}</span>
+                             <p className="text-xs text-ink-muted mt-1 flex items-center gap-1">
+                               <Package className="w-3 h-3" />
+                               {r.quantityKg}kg × {formatNPR(r.ratePerKg)}/kg
+diff --git a/app/components/ExpenseRow.tsx b/app/components/ExpenseRow.tsx
+index ef6327c..bc3d09e 100644
+--- a/app/components/ExpenseRow.tsx
++++ b/app/components/ExpenseRow.tsx
+@@ -10,7 +10,7 @@ import { useState } from "react";
+ import { Pencil, Trash2, Landmark } from "lucide-react";
+ import { Expense } from "@/app/types";
+ import { CATEGORIES, CROPS } from "@/app/utils/constants";
+-import { formatNPR, prettyDate } from "@/app/utils/helpers";
++import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
+ import ImageLightbox from "@/app/components/ImageLightbox";
+ 
+ interface ExpenseRowProps {
+@@ -81,7 +81,7 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: ExpenseRowProp
+         {expense.note && (
+           <p className="text-xs text-ink-muted truncate mt-0.5">{expense.note}</p>
+         )}
+-        <p className="text-xs text-ink-faint mt-0.5">{prettyDate(expense.date)}</p>
++        <p className="text-xs text-ink-faint mt-0.5">{prettyDateWithBS(expense.date)}</p>
+       </div>
+ 
+       {/* Amount */}
+diff --git a/app/components/IncomeRow.tsx b/app/components/IncomeRow.tsx
+index cc14838..c9dede5 100644
+--- a/app/components/IncomeRow.tsx
++++ b/app/components/IncomeRow.tsx
+@@ -11,7 +11,7 @@ import { useState } from "react";
+ import { Pencil, Trash2 } from "lucide-react";
+ import { Income } from "@/app/types";
+ import { CROPS } from "@/app/utils/constants";
+-import { formatNPR, prettyDate } from "@/app/utils/helpers";
++import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
+ import ImageLightbox from "@/app/components/ImageLightbox";
+ 
+ interface IncomeRowProps {
+@@ -80,7 +80,7 @@ export default function IncomeRow({ income, onEdit, onDelete }: IncomeRowProps)
+           Sold to <span className="font-medium text-ink">{income.buyer}</span>
+           {income.note && ` · ${income.note}`}
+         </p>
+-        <p className="text-xs text-ink-faint mt-0.5">{prettyDate(income.date)}</p>
++        <p className="text-xs text-ink-faint mt-0.5">{prettyDateWithBS(income.date)}</p>
+       </div>
+ 
+       <div className="text-right flex-shrink-0">
+diff --git a/app/crops/[crop]/CropDetailClient.tsx b/app/crops/[crop]/CropDetailClient.tsx
+index 82decd6..02047a0 100644
+--- a/app/crops/[crop]/CropDetailClient.tsx
++++ b/app/crops/[crop]/CropDetailClient.tsx
+@@ -30,7 +30,7 @@ import {
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
+ import { CROPS, CATEGORIES } from "@/app/utils/constants";
+-import { formatNPR, prettyDate, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
++import { formatNPR, prettyDateWithBS, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
+ import { CropDetailSkeleton } from "@/app/components/Skeleton";
+ import CropBuyerHistoryModal from "@/app/components/CropBuyerHistoryModal";
+ import { exportCropBuyersToPDF } from "@/app/utils/pdfExport";
+@@ -220,7 +220,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
+                     <div className="min-w-0">
+                       <p className="text-sm font-medium text-ink truncate">{inc.buyer}</p>
+                       <p className="text-xs text-ink-muted tabular-nums">
+-                        {prettyDate(inc.date)} · {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
++                        {prettyDateWithBS(inc.date)} · {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
+                       </p>
+                     </div>
+                     <div className="text-right flex-shrink-0">
+@@ -265,7 +265,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
+                       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cat?.bg ?? "bg-gray-100"} ${cat?.text ?? "text-gray-700"}`}>
+                         {exp.category}
+                       </span>
+-                      <p className="text-xs text-ink-muted mt-1 tabular-nums">{prettyDate(exp.date)}</p>
++                      <p className="text-xs text-ink-muted mt-1 tabular-nums">{prettyDateWithBS(exp.date)}</p>
+                     </div>
+                     <p className="text-sm font-semibold text-negative tabular-nums flex-shrink-0">
+                       −{formatNPR(exp.amount)}
+diff --git a/app/loans/page.tsx b/app/loans/page.tsx
+index e4bf950..62cdad8 100644
+--- a/app/loans/page.tsx
++++ b/app/loans/page.tsx
+@@ -38,7 +38,7 @@ import {
+   formatNPR,
+   getLoanStatus,
+   amountDueForLoan,
+-  prettyDate,
++  prettyDateWithBS,
+   calculateAccruedInterest,
+   totalInterestPaid,
+   interestDueForLoan,
+@@ -300,8 +300,8 @@ export default function LoansPage() {
+                         {loan.note && ` · ${loan.note}`}
+                       </p>
+                       <p className="text-xs text-ink-faint mt-0.5">
+-                        Taken {prettyDate(loan.dateTaken)}
+-                        {loan.dueDate && ` · Due ${prettyDate(loan.dueDate)}`}
++                        Taken {prettyDateWithBS(loan.dateTaken)}
++                        {loan.dueDate && ` · Due ${prettyDateWithBS(loan.dueDate)}`}
+                       </p>
+                       {due > 0 && (
+                         <button
+diff --git a/app/utils/helpers.ts b/app/utils/helpers.ts
+index 065f9e9..39a0225 100644
+--- a/app/utils/helpers.ts
++++ b/app/utils/helpers.ts
+@@ -17,6 +17,7 @@ import {
+   LoanStatusSummary,
+ } from "@/app/types";
+ import { CATEGORIES, CROPS } from "./constants";
++import { adToBS } from "./nepaliDate";
+ import { format, parseISO, startOfMonth } from "date-fns";
+ 
+ // NOTE: data now lives in MongoDB (see app/hooks/useExpenses.ts and
+@@ -350,9 +351,10 @@ export function buildCashFlowSummaries(
+ 
+ /** Convert expenses to a CSV string and trigger a browser download */
+ export function exportToCSV(expenses: Expense[]): void {
+-  const headers = ["Date", "Category", "Crop", "Amount (NPR)", "Note"];
++  const headers = ["Date (AD)", "Date (BS)", "Category", "Crop", "Amount (NPR)", "Note"];
+   const rows = expenses.map((e) => [
+     e.date,
++    adToBS(e.date),
+     e.category,
+     e.crop,
+     e.amount.toString(),
+@@ -372,12 +374,13 @@ export function exportToCSV(expenses: Expense[]): void {
+ 
+ /** Convert income/sale records to a CSV string and trigger a browser download */
+ export function exportIncomeToCSV(income: Income[]): void {
+-  const headers = ["Date", "Crop", "Buyer", "Quantity (kg)", "Rate/kg (NPR)", "Total (NPR)", "Paid (NPR)", "Due (NPR)", "Note"];
++  const headers = ["Date (AD)", "Date (BS)", "Crop", "Buyer", "Quantity (kg)", "Rate/kg (NPR)", "Total (NPR)", "Paid (NPR)", "Due (NPR)", "Note"];
+   const rows = income.map((i) => {
+     const total = i.ratePerKg * i.quantityKg;
+     const due = total - i.amountPaid;
+     return [
+       i.date,
++      adToBS(i.date),
+       i.crop,
+       `"${i.buyer.replace(/"/g, '""')}"`,
+       i.quantityKg.toString(),
+@@ -416,6 +419,18 @@ export function todayISO(): string {
+   return format(new Date(), "yyyy-MM-dd");
+ }
+ 
++/** "2026-08-06" → "Aug 6, 2026 · BS 2083 Shrawan 21" — for single-line UI display (tables, rows, modals) */
++export function prettyDateWithBS(isoDate: string): string {
++  const bs = adToBS(isoDate);
++  return bs ? `${prettyDate(isoDate)} · BS ${bs}` : prettyDate(isoDate);
++}
++
++/** Same as prettyDateWithBS but on two lines — for PDF table cells, where autotable wraps on "\n" */
++export function prettyDateWithBSMultiline(isoDate: string): string {
++  const bs = adToBS(isoDate);
++  return bs ? `${prettyDate(isoDate)}\nBS ${bs}` : prettyDate(isoDate);
++}
++
+ export interface OutstandingDue {
+   incomeId: string;
+   buyer: string;
+diff --git a/app/utils/pdfExport.ts b/app/utils/pdfExport.ts
+index 72bb5ee..d063fce 100644
+--- a/app/utils/pdfExport.ts
++++ b/app/utils/pdfExport.ts
+@@ -16,7 +16,7 @@
+ 
+ import { jsPDF } from "jspdf";
+ import { autoTable } from "jspdf-autotable";
+-import { prettyDate } from "./helpers";
++import { prettyDateWithBSMultiline } from "./helpers";
+ 
+ export interface BuyerHistoryRecord {
+   id: string;
+@@ -98,7 +98,7 @@ export function exportBuyerHistoryToPDF(
+     startY: 46,
+     head: [["Date", "Crop", "Qty (kg)", "Rate/kg", "Amount", "Paid", "Due", "Note"]],
+     body: records.map((r) => [
+-      prettyDate(r.date),
++      prettyDateWithBSMultiline(r.date),
+       r.crop,
+       r.quantityKg.toString(),
+       formatNPRForPDF(r.ratePerKg),
+@@ -224,7 +224,7 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
+       startY: cursorY + 9,
+       head: [["Date", "Qty (kg)", "Rate/kg", "Amount", "Paid", "Due", "Note"]],
+       body: b.rows.map((r) => [
+-        prettyDate(r.date),
++        prettyDateWithBSMultiline(r.date),
+         r.quantityKg.toString(),
+         formatNPRForPDF(r.ratePerKg),
+         formatNPRForPDF(r.amount),

@@ -17,6 +17,7 @@ import {
   LoanStatusSummary,
 } from "@/app/types";
 import { CATEGORIES, CROPS } from "./constants";
+import { adToBS } from "./nepaliDate";
 import { format, parseISO, startOfMonth } from "date-fns";
 
 // NOTE: data now lives in MongoDB (see app/hooks/useExpenses.ts and
@@ -350,9 +351,10 @@ export function buildCashFlowSummaries(
 
 /** Convert expenses to a CSV string and trigger a browser download */
 export function exportToCSV(expenses: Expense[]): void {
-  const headers = ["Date", "Category", "Crop", "Amount (NPR)", "Note"];
+  const headers = ["Date (AD)", "Date (BS)", "Category", "Crop", "Amount (NPR)", "Note"];
   const rows = expenses.map((e) => [
     e.date,
+    adToBS(e.date),
     e.category,
     e.crop,
     e.amount.toString(),
@@ -372,12 +374,13 @@ export function exportToCSV(expenses: Expense[]): void {
 
 /** Convert income/sale records to a CSV string and trigger a browser download */
 export function exportIncomeToCSV(income: Income[]): void {
-  const headers = ["Date", "Crop", "Buyer", "Quantity (kg)", "Rate/kg (NPR)", "Total (NPR)", "Paid (NPR)", "Due (NPR)", "Note"];
+  const headers = ["Date (AD)", "Date (BS)", "Crop", "Buyer", "Quantity (kg)", "Rate/kg (NPR)", "Total (NPR)", "Paid (NPR)", "Due (NPR)", "Note"];
   const rows = income.map((i) => {
     const total = i.ratePerKg * i.quantityKg;
     const due = total - i.amountPaid;
     return [
       i.date,
+      adToBS(i.date),
       i.crop,
       `"${i.buyer.replace(/"/g, '""')}"`,
       i.quantityKg.toString(),
@@ -414,6 +417,18 @@ export function prettyDate(isoDate: string): string {
 /** Today as "YYYY-MM-DD" (used as default date in the form) */
 export function todayISO(): string {
   return format(new Date(), "yyyy-MM-dd");
+}
+
+/** "2026-08-06" → "Aug 6, 2026 · BS 2083 Shrawan 21" — for single-line UI display (tables, rows, modals) */
+export function prettyDateWithBS(isoDate: string): string {
+  const bs = adToBS(isoDate);
+  return bs ? `${prettyDate(isoDate)} · BS ${bs}` : prettyDate(isoDate);
+}
+
+/** Same as prettyDateWithBS but on two lines — for PDF table cells, where autotable wraps on "\n" */
+export function prettyDateWithBSMultiline(isoDate: string): string {
+  const bs = adToBS(isoDate);
+  return bs ? `${prettyDate(isoDate)}\nBS ${bs}` : prettyDate(isoDate);
 }
 
 export interface OutstandingDue {

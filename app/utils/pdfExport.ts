@@ -16,7 +16,7 @@
 
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
-import { prettyDate } from "./helpers";
+import { prettyDateWithBSMultiline } from "./helpers";
 
 export interface BuyerHistoryRecord {
   id: string;
@@ -98,7 +98,7 @@ export function exportBuyerHistoryToPDF(
     startY: 46,
     head: [["Date", "Crop", "Qty (kg)", "Rate/kg", "Amount", "Paid", "Due", "Note"]],
     body: records.map((r) => [
-      prettyDate(r.date),
+      prettyDateWithBSMultiline(r.date),
       r.crop,
       r.quantityKg.toString(),
       formatNPRForPDF(r.ratePerKg),
@@ -224,7 +224,7 @@ export function exportCropBuyersToPDF(cropLabel: string, records: BuyerHistoryRe
       startY: cursorY + 9,
       head: [["Date", "Qty (kg)", "Rate/kg", "Amount", "Paid", "Due", "Note"]],
       body: b.rows.map((r) => [
-        prettyDate(r.date),
+        prettyDateWithBSMultiline(r.date),
         r.quantityKg.toString(),
         formatNPRForPDF(r.ratePerKg),
         formatNPRForPDF(r.amount),

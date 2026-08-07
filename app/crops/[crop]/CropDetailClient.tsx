@@ -30,7 +30,7 @@ import {
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import { CROPS, CATEGORIES } from "@/app/utils/constants";
-import { formatNPR, prettyDate, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
+import { formatNPR, prettyDateWithBS, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CropDetailSkeleton } from "@/app/components/Skeleton";
 import CropBuyerHistoryModal from "@/app/components/CropBuyerHistoryModal";
 import { exportCropBuyersToPDF } from "@/app/utils/pdfExport";
@@ -220,7 +220,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-ink truncate">{inc.buyer}</p>
                       <p className="text-xs text-ink-muted tabular-nums">
-                        {prettyDate(inc.date)} · {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
+                        {prettyDateWithBS(inc.date)} · {inc.quantityKg}kg × {formatNPR(inc.ratePerKg)}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -265,7 +265,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
                       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cat?.bg ?? "bg-gray-100"} ${cat?.text ?? "text-gray-700"}`}>
                         {exp.category}
                       </span>
-                      <p className="text-xs text-ink-muted mt-1 tabular-nums">{prettyDate(exp.date)}</p>
+                      <p className="text-xs text-ink-muted mt-1 tabular-nums">{prettyDateWithBS(exp.date)}</p>
                     </div>
                     <p className="text-sm font-semibold text-negative tabular-nums flex-shrink-0">
                       −{formatNPR(exp.amount)}

@@ -10,7 +10,7 @@ import { useState } from "react";
 import { Pencil, Trash2, Landmark } from "lucide-react";
 import { Expense } from "@/app/types";
 import { CATEGORIES, CROPS } from "@/app/utils/constants";
-import { formatNPR, prettyDate } from "@/app/utils/helpers";
+import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
 import ImageLightbox from "@/app/components/ImageLightbox";
 
 interface ExpenseRowProps {
@@ -81,7 +81,7 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: ExpenseRowProp
         {expense.note && (
           <p className="text-xs text-ink-muted truncate mt-0.5">{expense.note}</p>
         )}
-        <p className="text-xs text-ink-faint mt-0.5">{prettyDate(expense.date)}</p>
+        <p className="text-xs text-ink-faint mt-0.5">{prettyDateWithBS(expense.date)}</p>
       </div>
 
       {/* Amount */}

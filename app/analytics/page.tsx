@@ -15,7 +15,7 @@ import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
 import { CROPS } from "@/app/utils/constants";
-import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDate } from "@/app/utils/helpers";
+import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDateWithBS } from "@/app/utils/helpers";
 import { CropType } from "@/app/types";
 import { AnalyticsSkeleton } from "@/app/components/Skeleton";
 
@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
                       {crop?.emoji} {b.buyer}
                     </p>
                     <p className="text-xs text-ink-muted">
-                      {b.crop} · {b.saleCount} sale{b.saleCount === 1 ? "" : "s"} · since {prettyDate(b.oldestDueDate)}
+                      {b.crop} · {b.saleCount} sale{b.saleCount === 1 ? "" : "s"} · since {prettyDateWithBS(b.oldestDueDate)}
                     </p>
                   </div>
                   <p className="text-sm font-bold text-negative tabular-nums flex-shrink-0">

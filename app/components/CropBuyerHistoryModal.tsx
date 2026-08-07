@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, Search, User, Package, Loader2, Inbox, FileDown } from "lucide-react";
-import { formatNPR, prettyDate } from "@/app/utils/helpers";
+import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
 import { exportBuyerHistoryToPDF, type BuyerHistoryRecord, type BuyerHistorySummary } from "@/app/utils/pdfExport";
 
 interface CropBuyerHistoryModalProps {
@@ -209,7 +209,7 @@ export default function CropBuyerHistoryModal({ crop, cropLabel, onClose }: Crop
                       <div key={r.id} className="px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <span className="text-xs text-ink-faint tabular-nums">{prettyDate(r.date)}</span>
+                            <span className="text-xs text-ink-faint tabular-nums">{prettyDateWithBS(r.date)}</span>
                             <p className="text-xs text-ink-muted mt-1 flex items-center gap-1">
                               <Package className="w-3 h-3" />
                               {r.quantityKg}kg × {formatNPR(r.ratePerKg)}/kg

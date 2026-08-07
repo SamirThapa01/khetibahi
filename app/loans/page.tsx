@@ -38,7 +38,7 @@ import {
   formatNPR,
   getLoanStatus,
   amountDueForLoan,
-  prettyDate,
+  prettyDateWithBS,
   calculateAccruedInterest,
   totalInterestPaid,
   interestDueForLoan,
@@ -300,8 +300,8 @@ export default function LoansPage() {
                         {loan.note && ` · ${loan.note}`}
                       </p>
                       <p className="text-xs text-ink-faint mt-0.5">
-                        Taken {prettyDate(loan.dateTaken)}
-                        {loan.dueDate && ` · Due ${prettyDate(loan.dueDate)}`}
+                        Taken {prettyDateWithBS(loan.dateTaken)}
+                        {loan.dueDate && ` · Due ${prettyDateWithBS(loan.dueDate)}`}
                       </p>
                       {due > 0 && (
                         <button

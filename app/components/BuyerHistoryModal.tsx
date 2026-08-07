@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { X, Search, User, Package, Loader2, Inbox } from "lucide-react";
-import { formatNPR, prettyDate } from "@/app/utils/helpers";
+import { formatNPR, prettyDateWithBS } from "@/app/utils/helpers";
 import { CROPS } from "@/app/utils/constants";
 
 interface BuyerRecord {
@@ -206,7 +206,7 @@ export default function BuyerHistoryModal({ onClose }: BuyerHistoryModalProps) {
                                 <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-soft text-brand whitespace-nowrap">
                                   {cropMeta?.emoji} {r.crop}
                                 </span>
-                                <span className="text-xs text-ink-faint tabular-nums">{prettyDate(r.date)}</span>
+                                <span className="text-xs text-ink-faint tabular-nums">{prettyDateWithBS(r.date)}</span>
                               </div>
                               <p className="text-xs text-ink-muted mt-1 flex items-center gap-1">
                                 <Package className="w-3 h-3" />
