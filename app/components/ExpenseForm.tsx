@@ -9,8 +9,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { X, Save, AlertTriangle } from "lucide-react";
 import { ExpenseFormData } from "@/app/types";
-import { CATEGORIES, SEASONS } from "@/app/utils/constants";
+import { CATEGORIES, SEASONS, SUBSIDY_PROGRAMS } from "@/app/utils/constants";
 import { todayISO } from "@/app/utils/helpers";
+import { adToBS } from "@/app/utils/nepaliDate";
 import ImageUploadField from "@/app/components/ImageUploadField";
 import { useCrops } from "@/app/hooks/useCrops";
 import { useTodayEntries } from "@/app/hooks/useTodayEntries";
@@ -141,6 +142,7 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId
               onChange={(e) => set("date", e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             />
+            {form.date && <p className="text-xs text-ink-faint mt-1">BS: {adToBS(form.date)}</p>}
             {errors.date && <p className="text-negative text-xs mt-1">{errors.date}</p>}
           </div>
 
@@ -272,6 +274,56 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId
               />
             </div>
             {errors.amount && <p className="text-negative text-xs mt-1">{errors.amount}</p>}
+          </div>
+
+          {/* Krishi anudan (government subsidy) tracking */}
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-ink-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.subsidyReceived ?? false}
+                onChange={(e) => set("subsidyReceived", e.target.checked)}
+                className="rounded border-line"
+              />
+              Received government subsidy (anudan) for this
+            </label>
+
+            {form.subsidyReceived && (
+              <div className="mt-2 border border-line rounded-xl p-3 space-y-3 bg-surface-2">
+                <div>
+                  <label className="block text-xs font-medium text-ink-muted mb-1">Program</label>
+                  <select
+                    value={form.subsidyProgram ?? "Fertilizer"}
+                    onChange={(e) => set("subsidyProgram", e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  >
+                    {SUBSIDY_PROGRAMS.map((p) => (
+                      <option key={p} value={p}>{p} anudan</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-ink-muted mb-1">
+                    Subsidy amount received (NPR ₹)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={form.amount || undefined}
+                      value={form.subsidyAmount || ""}
+                      onChange={(e) => set("subsidyAmount", Number(e.target.value))}
+                      placeholder="0"
+                      className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                  </div>
+                  <p className="text-xs text-ink-faint mt-1">
+                    Just the portion covered by the government — doesn&apos;t change the amount above.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Note */}

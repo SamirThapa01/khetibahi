@@ -32,6 +32,9 @@ function serialize(doc: HydratedDocument<IExpense>) {
     amount: doc.amount,
     note: doc.note,
     billImage: doc.billImage || undefined,
+    subsidyReceived: doc.subsidyReceived || undefined,
+    subsidyProgram: doc.subsidyProgram || undefined,
+    subsidyAmount: doc.subsidyAmount ?? undefined,
     createdAt: doc.createdAt.toISOString(),
   };
 }

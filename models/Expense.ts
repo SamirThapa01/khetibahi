@@ -46,6 +46,15 @@ export interface IExpense {
   createdAt: Date;
 
    season?: string; 
+
+  // ── Krishi anudan (government subsidy) tracking ──
+  // Purely informational metadata for reporting to cooperatives/Krishi
+  // offices — never changes `amount`, which stays whatever the farmer
+  // actually paid. subsidyAmount records how much of that was covered
+  // by a government fertilizer/seed/irrigation/equipment subsidy.
+  subsidyReceived?: boolean;
+  subsidyProgram?: string; // "Fertilizer" | "Seed" | "Irrigation" | "Equipment" | "Other"
+  subsidyAmount?: number;
 }
 
 const ExpenseSchema = new Schema<IExpense>(
@@ -58,6 +67,10 @@ const ExpenseSchema = new Schema<IExpense>(
     note: { type: String, default: "", trim: true },
     billImage: { type: String, default: "" },
     season: { type: String, required: false },
+
+    subsidyReceived: { type: Boolean, default: false },
+    subsidyProgram: { type: String, required: false, trim: true },
+    subsidyAmount: { type: Number, required: false, min: 0 },
   },
   { timestamps: true }
 );

@@ -21,6 +21,9 @@ function serialize(doc: HydratedDocument<IExpense>) {
     note: doc.note,
     billImage: doc.billImage || undefined,
     season: doc.season || undefined, 
+    subsidyReceived: doc.subsidyReceived || undefined,
+    subsidyProgram: doc.subsidyProgram || undefined,
+    subsidyAmount: doc.subsidyAmount ?? undefined,
     createdAt: doc.createdAt.toISOString(),
   };
 }
@@ -42,13 +45,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { date, category, crop, amount, note, billImage,season } = body;
+    const { date, category, crop, amount, note, billImage,season, subsidyReceived, subsidyProgram, subsidyAmount } = body;
 
     if (!date || !category || amount === undefined || amount === null) {
       return NextResponse.json({ error: "date, category, and amount are required." }, { status: 400 });
     }
     if (typeof amount !== "number" || amount <= 0) {
       return NextResponse.json({ error: "Amount must be a positive number." }, { status: 400 });
+    }
+    if (subsidyAmount !== undefined && subsidyAmount !== null && (typeof subsidyAmount !== "number" || subsidyAmount < 0)) {
+      return NextResponse.json({ error: "Subsidy amount must be a non-negative number." }, { status: 400 });
     }
 
     await dbConnect();
@@ -64,6 +70,9 @@ export async function POST(req: NextRequest) {
       note: note ?? "",
       billImage: billImage ?? "",
       season: season || undefined, 
+      subsidyReceived: subsidyReceived ?? false,
+      subsidyProgram: subsidyReceived ? (subsidyProgram || undefined) : undefined,
+      subsidyAmount: subsidyReceived ? (subsidyAmount ?? undefined) : undefined,
     });
 
     return NextResponse.json(serialize(created), { status: 201 });

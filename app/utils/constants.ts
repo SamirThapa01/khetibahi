@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────
 
 import { ExpenseCategory, CropType, LoanSource } from "@/app/types";
+import { currentBSYear } from "@/app/utils/nepaliDate";
 
 /** Category metadata: label, emoji, tailwind colour classes */
 export const CATEGORIES: {
@@ -25,10 +26,16 @@ export const CATEGORIES: {
   { value: "Miscellaneous", label: "Miscellaneous", emoji: "📦", bg: "bg-gray-100",   text: "text-gray-700",   chart: "#6b7280" },
 ];
 
+// Nepali farming seasons are thought of in Bikram Sambat (BS) years, not
+// the AD year new Date().getFullYear() would give — e.g. mid-2026 AD is
+// already BS 2083 for most of the year, not 2026.
 export const SEASONS = [
-  "Garmi Mahina" + new Date().getFullYear(),
-  "Jado Mahina " + new Date().getFullYear(),
+  "Garmi Mahina " + currentBSYear(),
+  "Jado Mahina " + currentBSYear(),
 ];
+
+/** Government anudan (subsidy) programs a Nepali farmer might receive support from. */
+export const SUBSIDY_PROGRAMS = ["Fertilizer", "Seed", "Irrigation", "Equipment", "Other"] as const;
 export const CROPS: { value: CropType | "All Crops"; label: string; emoji: string }[] = [
   { value: "All Crops",  label: "All Crops",  emoji: "🌾" },
   { value: "Tomato",     label: "Tomato",     emoji: "🍅" },

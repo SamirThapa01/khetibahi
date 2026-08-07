@@ -378,6 +378,9 @@ export default function ExpensesPage() {
                   amount: editing.amount,
                   note: editing.note,
                   billImage: editing.billImage,
+                  subsidyReceived: editing.subsidyReceived,
+                  subsidyProgram: editing.subsidyProgram,
+                  subsidyAmount: editing.subsidyAmount,
                 }
               : undefined
           }

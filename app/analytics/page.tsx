@@ -10,7 +10,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users } from "lucide-react";
+import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users, Landmark } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
 import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
@@ -61,6 +61,24 @@ export default function AnalyticsPage() {
 
   // Who owes what, biggest first
   const buyerDues = useMemo(() => buildBuyerDues(income), [income]);
+
+  // Krishi anudan (government subsidy) received, grouped by program —
+  // computed the same way cropTotals is above: a plain client-side
+  // reduce over the expenses already in memory, no extra fetch needed.
+  const subsidyByProgram = useMemo(() => {
+    const totals: Record<string, { total: number; count: number }> = {};
+    for (const e of expenses) {
+      if (!e.subsidyReceived) continue;
+      const key = e.subsidyProgram || "Other";
+      if (!totals[key]) totals[key] = { total: 0, count: 0 };
+      totals[key].total += e.subsidyAmount ?? 0;
+      totals[key].count += 1;
+    }
+    return Object.entries(totals)
+      .map(([program, v]) => ({ program, ...v }))
+      .sort((a, b) => b.total - a.total);
+  }, [expenses]);
+  const totalSubsidy = subsidyByProgram.reduce((sum, p) => sum + p.total, 0);
 
   if (!isLoaded || !incomeLoaded) {
     return <AnalyticsSkeleton />;
@@ -267,6 +285,39 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Krishi anudan (government subsidy) received — the kind of record
+          a cooperative or Krishi office asks for when re-applying next season. */}
+      {subsidyByProgram.length > 0 && (
+        <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-accent" />
+              Krishi Anudan Received
+            </h3>
+            <span className="text-sm font-semibold text-accent tabular-nums">
+              {formatNPR(totalSubsidy)}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {subsidyByProgram.map((p) => (
+              <div
+                key={p.program}
+                className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0"
+              >
+                <span className="text-ink-muted">
+                  {p.program} anudan · {p.count} {p.count === 1 ? "expense" : "expenses"}
+                </span>
+                <span className="font-semibold text-ink tabular-nums">{formatNPR(p.total)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-ink-faint mt-3">
+            Total subsidy received across all programs — useful when re-applying with your
+            cooperative or local Krishi office.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

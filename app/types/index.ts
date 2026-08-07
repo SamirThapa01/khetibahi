@@ -35,6 +35,12 @@ export interface Expense {
   createdAt: string;    // ISO timestamp — when the user added it
   
   season?: string;
+
+  // ── Krishi anudan (government subsidy) tracking ──
+  // Informational only — never affects `amount` or any existing totals.
+  subsidyReceived?: boolean;
+  subsidyProgram?: string; // "Fertilizer" | "Seed" | "Irrigation" | "Equipment" | "Other"
+  subsidyAmount?: number;
 }
 
 /** What the add/edit form holds before it becomes an Expense */

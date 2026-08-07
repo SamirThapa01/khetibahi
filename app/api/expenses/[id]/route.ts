@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const body = await req.json();
-    const { date, category, crop, amount, note, billImage, season} = body;
+    const { date, category, crop, amount, note, billImage, season, subsidyReceived, subsidyProgram, subsidyAmount } = body;
 
     await dbConnect();
 
@@ -26,7 +26,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // whether the id exists but belongs to someone else.
     const updated = await Expense.findOneAndUpdate(
       { _id: id, userId: user.userId },
-      { date, category, crop, amount, note, billImage: billImage ?? "",season: season || undefined  },
+      {
+        date,
+        category,
+        crop,
+        amount,
+        note,
+        billImage: billImage ?? "",
+        season: season || undefined,
+        subsidyReceived: subsidyReceived ?? false,
+        subsidyProgram: subsidyReceived ? (subsidyProgram || undefined) : undefined,
+        subsidyAmount: subsidyReceived ? (subsidyAmount ?? undefined) : undefined,
+      },
       { new: true, runValidators: true }
     );
 
@@ -43,6 +54,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       note: updated.note,
       billImage: updated.billImage || undefined,
        season: updated.season || undefined,
+      subsidyReceived: updated.subsidyReceived || undefined,
+      subsidyProgram: updated.subsidyProgram || undefined,
+      subsidyAmount: updated.subsidyAmount ?? undefined,
       createdAt: updated.createdAt.toISOString(),
     });
   } catch (err) {

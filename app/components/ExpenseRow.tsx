@@ -7,7 +7,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Landmark } from "lucide-react";
 import { Expense } from "@/app/types";
 import { CATEGORIES, CROPS } from "@/app/utils/constants";
 import { formatNPR, prettyDate } from "@/app/utils/helpers";
@@ -66,6 +66,15 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: ExpenseRowProp
           {expense.crop !== "All Crops" && (
             <span className="text-xs text-ink-muted">
               {crop?.emoji} {expense.crop}
+            </span>
+          )}
+          {expense.subsidyReceived && (
+            <span
+              className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-accent-soft text-accent"
+              title={`${expense.subsidyProgram ?? "Anudan"} subsidy${expense.subsidyAmount ? `: ${formatNPR(expense.subsidyAmount)}` : ""}`}
+            >
+              <Landmark className="w-3 h-3" />
+              Anudan
             </span>
           )}
         </div>

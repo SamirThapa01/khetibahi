@@ -1,0 +1,581 @@
+diff --git a/app/analytics/page.tsx b/app/analytics/page.tsx
+index bff6069..4f0275a 100644
+--- a/app/analytics/page.tsx
++++ b/app/analytics/page.tsx
+@@ -10,7 +10,7 @@
+ "use client";
+ 
+ import { useMemo } from "react";
+-import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users } from "lucide-react";
++import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users, Landmark } from "lucide-react";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
+ import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
+@@ -62,6 +62,24 @@ export default function AnalyticsPage() {
+   // Who owes what, biggest first
+   const buyerDues = useMemo(() => buildBuyerDues(income), [income]);
+ 
++  // Krishi anudan (government subsidy) received, grouped by program —
++  // computed the same way cropTotals is above: a plain client-side
++  // reduce over the expenses already in memory, no extra fetch needed.
++  const subsidyByProgram = useMemo(() => {
++    const totals: Record<string, { total: number; count: number }> = {};
++    for (const e of expenses) {
++      if (!e.subsidyReceived) continue;
++      const key = e.subsidyProgram || "Other";
++      if (!totals[key]) totals[key] = { total: 0, count: 0 };
++      totals[key].total += e.subsidyAmount ?? 0;
++      totals[key].count += 1;
++    }
++    return Object.entries(totals)
++      .map(([program, v]) => ({ program, ...v }))
++      .sort((a, b) => b.total - a.total);
++  }, [expenses]);
++  const totalSubsidy = subsidyByProgram.reduce((sum, p) => sum + p.total, 0);
++
+   if (!isLoaded || !incomeLoaded) {
+     return <AnalyticsSkeleton />;
+   }
+@@ -267,6 +285,39 @@ export default function AnalyticsPage() {
+           )}
+         </div>
+       </div>
++
++      {/* Krishi anudan (government subsidy) received — the kind of record
++          a cooperative or Krishi office asks for when re-applying next season. */}
++      {subsidyByProgram.length > 0 && (
++        <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
++          <div className="flex items-center justify-between mb-3">
++            <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
++              <Landmark className="w-4 h-4 text-accent" />
++              Krishi Anudan Received
++            </h3>
++            <span className="text-sm font-semibold text-accent tabular-nums">
++              {formatNPR(totalSubsidy)}
++            </span>
++          </div>
++          <div className="space-y-2">
++            {subsidyByProgram.map((p) => (
++              <div
++                key={p.program}
++                className="flex items-center justify-between text-sm py-1.5 border-b border-line last:border-0"
++              >
++                <span className="text-ink-muted">
++                  {p.program} anudan · {p.count} {p.count === 1 ? "expense" : "expenses"}
++                </span>
++                <span className="font-semibold text-ink tabular-nums">{formatNPR(p.total)}</span>
++              </div>
++            ))}
++          </div>
++          <p className="text-xs text-ink-faint mt-3">
++            Total subsidy received across all programs — useful when re-applying with your
++            cooperative or local Krishi office.
++          </p>
++        </div>
++      )}
+     </div>
+   );
+ }
+diff --git a/app/api/expenses/[id]/route.ts b/app/api/expenses/[id]/route.ts
+index b928db8..87fef08 100644
+--- a/app/api/expenses/[id]/route.ts
++++ b/app/api/expenses/[id]/route.ts
+@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+   try {
+     const { id } = await params;
+     const body = await req.json();
+-    const { date, category, crop, amount, note, billImage, season} = body;
++    const { date, category, crop, amount, note, billImage, season, subsidyReceived, subsidyProgram, subsidyAmount } = body;
+ 
+     await dbConnect();
+ 
+@@ -26,7 +26,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+     // whether the id exists but belongs to someone else.
+     const updated = await Expense.findOneAndUpdate(
+       { _id: id, userId: user.userId },
+-      { date, category, crop, amount, note, billImage: billImage ?? "",season: season || undefined  },
++      {
++        date,
++        category,
++        crop,
++        amount,
++        note,
++        billImage: billImage ?? "",
++        season: season || undefined,
++        subsidyReceived: subsidyReceived ?? false,
++        subsidyProgram: subsidyReceived ? (subsidyProgram || undefined) : undefined,
++        subsidyAmount: subsidyReceived ? (subsidyAmount ?? undefined) : undefined,
++      },
+       { new: true, runValidators: true }
+     );
+ 
+@@ -43,6 +54,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id:
+       note: updated.note,
+       billImage: updated.billImage || undefined,
+        season: updated.season || undefined,
++      subsidyReceived: updated.subsidyReceived || undefined,
++      subsidyProgram: updated.subsidyProgram || undefined,
++      subsidyAmount: updated.subsidyAmount ?? undefined,
+       createdAt: updated.createdAt.toISOString(),
+     });
+   } catch (err) {
+diff --git a/app/api/expenses/list/route.ts b/app/api/expenses/list/route.ts
+index b2b063a..ce3d81d 100644
+--- a/app/api/expenses/list/route.ts
++++ b/app/api/expenses/list/route.ts
+@@ -32,6 +32,9 @@ function serialize(doc: HydratedDocument<IExpense>) {
+     amount: doc.amount,
+     note: doc.note,
+     billImage: doc.billImage || undefined,
++    subsidyReceived: doc.subsidyReceived || undefined,
++    subsidyProgram: doc.subsidyProgram || undefined,
++    subsidyAmount: doc.subsidyAmount ?? undefined,
+     createdAt: doc.createdAt.toISOString(),
+   };
+ }
+diff --git a/app/api/expenses/route.ts b/app/api/expenses/route.ts
+index e42ca12..4e46b5a 100644
+--- a/app/api/expenses/route.ts
++++ b/app/api/expenses/route.ts
+@@ -21,6 +21,9 @@ function serialize(doc: HydratedDocument<IExpense>) {
+     note: doc.note,
+     billImage: doc.billImage || undefined,
+     season: doc.season || undefined, 
++    subsidyReceived: doc.subsidyReceived || undefined,
++    subsidyProgram: doc.subsidyProgram || undefined,
++    subsidyAmount: doc.subsidyAmount ?? undefined,
+     createdAt: doc.createdAt.toISOString(),
+   };
+ }
+@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
+ 
+   try {
+     const body = await req.json();
+-    const { date, category, crop, amount, note, billImage,season } = body;
++    const { date, category, crop, amount, note, billImage,season, subsidyReceived, subsidyProgram, subsidyAmount } = body;
+ 
+     if (!date || !category || amount === undefined || amount === null) {
+       return NextResponse.json({ error: "date, category, and amount are required." }, { status: 400 });
+@@ -50,6 +53,9 @@ export async function POST(req: NextRequest) {
+     if (typeof amount !== "number" || amount <= 0) {
+       return NextResponse.json({ error: "Amount must be a positive number." }, { status: 400 });
+     }
++    if (subsidyAmount !== undefined && subsidyAmount !== null && (typeof subsidyAmount !== "number" || subsidyAmount < 0)) {
++      return NextResponse.json({ error: "Subsidy amount must be a non-negative number." }, { status: 400 });
++    }
+ 
+     await dbConnect();
+     // userId comes from the verified JWT, never from the request body —
+@@ -64,6 +70,9 @@ export async function POST(req: NextRequest) {
+       note: note ?? "",
+       billImage: billImage ?? "",
+       season: season || undefined, 
++      subsidyReceived: subsidyReceived ?? false,
++      subsidyProgram: subsidyReceived ? (subsidyProgram || undefined) : undefined,
++      subsidyAmount: subsidyReceived ? (subsidyAmount ?? undefined) : undefined,
+     });
+ 
+     return NextResponse.json(serialize(created), { status: 201 });
+diff --git a/app/api/expenses/subsidy-summary/route.ts b/app/api/expenses/subsidy-summary/route.ts
+new file mode 100644
+index 0000000..267ac9b
+--- /dev/null
++++ b/app/api/expenses/subsidy-summary/route.ts
+@@ -0,0 +1,62 @@
++// ─────────────────────────────────────────────
++//  /api/expenses/subsidy-summary
++//  GET → total government subsidy (anudan) received, broken down by
++//        program (Fertilizer / Seed / Irrigation / Equipment / Other),
++//        for the logged-in user.
++//
++//  This is exactly the kind of record a cooperative or Krishi office
++//  asks for when a farmer re-applies for next season's subsidy: "how
++//  much anudan have you already received, and for what." Computed
++//  server-side with an aggregation so it stays cheap even as the
++//  expense history grows — same pattern as /api/expenses/summary.
++//
++//  Optional ?year=YYYY (AD year, since `date` is stored as an AD
++//  "YYYY-MM-DD" string) narrows it to one year; omit for all-time.
++// ─────────────────────────────────────────────
++
++import { NextRequest, NextResponse } from "next/server";
++import { dbConnect } from "@/lib/mongodb";
++import { Expense } from "@/models/Expense";
++import { getCurrentUser } from "@/lib/session";
++import { Types } from "mongoose";
++
++export async function GET(req: NextRequest) {
++  const user = await getCurrentUser();
++  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
++
++  await dbConnect();
++
++  const { searchParams } = new URL(req.url);
++  const year = searchParams.get("year"); // "2026" or null for all-time
++
++  const match: Record<string, unknown> = {
++    userId: new Types.ObjectId(user.userId),
++    subsidyReceived: true,
++  };
++  if (year && /^\d{4}$/.test(year)) {
++    match.date = { $regex: `^${year}` };
++  }
++
++  const byProgram = await Expense.aggregate([
++    { $match: match },
++    {
++      $group: {
++        _id: { $ifNull: ["$subsidyProgram", "Other"] },
++        totalSubsidy: { $sum: { $ifNull: ["$subsidyAmount", 0] } },
++        count: { $sum: 1 },
++      },
++    },
++    { $sort: { totalSubsidy: -1 } },
++  ]);
++
++  const programs = byProgram.map((p) => ({
++    program: p._id as string,
++    totalSubsidy: p.totalSubsidy as number,
++    count: p.count as number,
++  }));
++
++  const totalSubsidy = programs.reduce((sum, p) => sum + p.totalSubsidy, 0);
++  const totalCount = programs.reduce((sum, p) => sum + p.count, 0);
++
++  return NextResponse.json({ year: year ?? "all", programs, totalSubsidy, totalCount });
++}
+diff --git a/app/components/ExpenseForm.tsx b/app/components/ExpenseForm.tsx
+index 88e92c8..f42bc6e 100644
+--- a/app/components/ExpenseForm.tsx
++++ b/app/components/ExpenseForm.tsx
+@@ -9,8 +9,9 @@
+ import { useState, useEffect, useMemo } from "react";
+ import { X, Save, AlertTriangle } from "lucide-react";
+ import { ExpenseFormData } from "@/app/types";
+-import { CATEGORIES, SEASONS } from "@/app/utils/constants";
++import { CATEGORIES, SEASONS, SUBSIDY_PROGRAMS } from "@/app/utils/constants";
+ import { todayISO } from "@/app/utils/helpers";
++import { adToBS } from "@/app/utils/nepaliDate";
+ import ImageUploadField from "@/app/components/ImageUploadField";
+ import { useCrops } from "@/app/hooks/useCrops";
+ import { useTodayEntries } from "@/app/hooks/useTodayEntries";
+@@ -141,6 +142,7 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId
+               onChange={(e) => set("date", e.target.value)}
+               className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+             />
++            {form.date && <p className="text-xs text-ink-faint mt-1">BS: {adToBS(form.date)}</p>}
+             {errors.date && <p className="text-negative text-xs mt-1">{errors.date}</p>}
+           </div>
+ 
+@@ -274,6 +276,56 @@ export default function ExpenseForm({ onSubmit, onCancel, initialData, editingId
+             {errors.amount && <p className="text-negative text-xs mt-1">{errors.amount}</p>}
+           </div>
+ 
++          {/* Krishi anudan (government subsidy) tracking */}
++          <div>
++            <label className="flex items-center gap-2 text-sm font-medium text-ink-muted cursor-pointer">
++              <input
++                type="checkbox"
++                checked={form.subsidyReceived ?? false}
++                onChange={(e) => set("subsidyReceived", e.target.checked)}
++                className="rounded border-line"
++              />
++              Received government subsidy (anudan) for this
++            </label>
++
++            {form.subsidyReceived && (
++              <div className="mt-2 border border-line rounded-xl p-3 space-y-3 bg-surface-2">
++                <div>
++                  <label className="block text-xs font-medium text-ink-muted mb-1">Program</label>
++                  <select
++                    value={form.subsidyProgram ?? "Fertilizer"}
++                    onChange={(e) => set("subsidyProgram", e.target.value)}
++                    className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++                  >
++                    {SUBSIDY_PROGRAMS.map((p) => (
++                      <option key={p} value={p}>{p} anudan</option>
++                    ))}
++                  </select>
++                </div>
++                <div>
++                  <label className="block text-xs font-medium text-ink-muted mb-1">
++                    Subsidy amount received (NPR ₹)
++                  </label>
++                  <div className="relative">
++                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint text-sm">₹</span>
++                    <input
++                      type="number"
++                      min={0}
++                      max={form.amount || undefined}
++                      value={form.subsidyAmount || ""}
++                      onChange={(e) => set("subsidyAmount", Number(e.target.value))}
++                      placeholder="0"
++                      className="w-full pl-7 pr-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
++                    />
++                  </div>
++                  <p className="text-xs text-ink-faint mt-1">
++                    Just the portion covered by the government — doesn&apos;t change the amount above.
++                  </p>
++                </div>
++              </div>
++            )}
++          </div>
++
+           {/* Note */}
+           <div>
+             <label className="block text-sm font-medium text-ink-muted mb-1">
+diff --git a/app/components/ExpenseRow.tsx b/app/components/ExpenseRow.tsx
+index ee65afb..ef6327c 100644
+--- a/app/components/ExpenseRow.tsx
++++ b/app/components/ExpenseRow.tsx
+@@ -7,7 +7,7 @@
+ "use client";
+ 
+ import { useState } from "react";
+-import { Pencil, Trash2 } from "lucide-react";
++import { Pencil, Trash2, Landmark } from "lucide-react";
+ import { Expense } from "@/app/types";
+ import { CATEGORIES, CROPS } from "@/app/utils/constants";
+ import { formatNPR, prettyDate } from "@/app/utils/helpers";
+@@ -68,6 +68,15 @@ export default function ExpenseRow({ expense, onEdit, onDelete }: ExpenseRowProp
+               {crop?.emoji} {expense.crop}
+             </span>
+           )}
++          {expense.subsidyReceived && (
++            <span
++              className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-accent-soft text-accent"
++              title={`${expense.subsidyProgram ?? "Anudan"} subsidy${expense.subsidyAmount ? `: ${formatNPR(expense.subsidyAmount)}` : ""}`}
++            >
++              <Landmark className="w-3 h-3" />
++              Anudan
++            </span>
++          )}
+         </div>
+         {expense.note && (
+           <p className="text-xs text-ink-muted truncate mt-0.5">{expense.note}</p>
+diff --git a/app/components/IncomeForm.tsx b/app/components/IncomeForm.tsx
+index 4b6a80a..3474602 100644
+--- a/app/components/IncomeForm.tsx
++++ b/app/components/IncomeForm.tsx
+@@ -12,6 +12,7 @@ import { X, Save, CheckCircle2, Clock3, CircleDollarSign, AlertTriangle } from "
+ import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
+ import { SEASONS } from "@/app/utils/constants";
+ import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
++import { adToBS } from "@/app/utils/nepaliDate";
+ import ImageUploadField from "@/app/components/ImageUploadField";
+ import { useCrops } from "@/app/hooks/useCrops";
+ import { useTodayEntries } from "@/app/hooks/useTodayEntries";
+@@ -187,6 +188,7 @@ export default function IncomeForm({ onSubmit, onCancel, initialData, editingId
+               onChange={(e) => set("date", e.target.value)}
+               className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+             />
++            {form.date && <p className="text-xs text-ink-faint mt-1">BS: {adToBS(form.date)}</p>}
+             {errors.date && <p className="text-negative text-xs mt-1">{errors.date}</p>}
+           </div>
+ 
+diff --git a/app/components/TodayEntries.tsx b/app/components/TodayEntries.tsx
+index 059c0fd..1f09cee 100644
+--- a/app/components/TodayEntries.tsx
++++ b/app/components/TodayEntries.tsx
+@@ -11,6 +11,7 @@ import { CalendarCheck2, Coins, Wallet, RefreshCw } from "lucide-react";
+ import { format, parseISO } from "date-fns";
+ import { formatNPR } from "@/app/utils/helpers";
+ import { CATEGORIES, CROPS } from "@/app/utils/constants";
++import { todayBS } from "@/app/utils/nepaliDate";
+ import { useTodayEntries, TodayIncomeEntry, TodayExpenseEntry } from "@/app/hooks/useTodayEntries";
+ 
+ function cropEmoji(crop: string) {
+@@ -50,10 +51,13 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
+   return (
+     <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+       <div className="flex items-center justify-between mb-3">
+-        <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+-          <CalendarCheck2 className="w-4 h-4 text-brand" />
+-          Today&apos;s Entries
+-        </h3>
++        <div>
++          <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
++            <CalendarCheck2 className="w-4 h-4 text-brand" />
++            Today&apos;s Entries
++          </h3>
++          <p className="text-xs text-ink-faint mt-0.5">BS {todayBS()}</p>
++        </div>
+         <button
+           onClick={() => refetch()}
+           disabled={loading}
+@@ -68,7 +72,7 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
+ 
+       {!error && !loading && rows.length === 0 && (
+         <p className="text-sm text-ink-muted">
+-          Nothing logged today yet — the first sale or expense you add will show up here for
++          No entries recorded today — the first sale or expense you add will show up here for
+           everyone at home to see.
+         </p>
+       )}
+diff --git a/app/expenses/page.tsx b/app/expenses/page.tsx
+index 46e47ac..fe2f6e9 100644
+--- a/app/expenses/page.tsx
++++ b/app/expenses/page.tsx
+@@ -378,6 +378,9 @@ export default function ExpensesPage() {
+                   amount: editing.amount,
+                   note: editing.note,
+                   billImage: editing.billImage,
++                  subsidyReceived: editing.subsidyReceived,
++                  subsidyProgram: editing.subsidyProgram,
++                  subsidyAmount: editing.subsidyAmount,
+                 }
+               : undefined
+           }
+diff --git a/app/types/index.ts b/app/types/index.ts
+index a138871..cdc0fb8 100644
+--- a/app/types/index.ts
++++ b/app/types/index.ts
+@@ -35,6 +35,12 @@ export interface Expense {
+   createdAt: string;    // ISO timestamp — when the user added it
+   
+   season?: string;
++
++  // ── Krishi anudan (government subsidy) tracking ──
++  // Informational only — never affects `amount` or any existing totals.
++  subsidyReceived?: boolean;
++  subsidyProgram?: string; // "Fertilizer" | "Seed" | "Irrigation" | "Equipment" | "Other"
++  subsidyAmount?: number;
+ }
+ 
+ /** What the add/edit form holds before it becomes an Expense */
+diff --git a/app/utils/constants.ts b/app/utils/constants.ts
+index d014e53..e1b17bf 100644
+--- a/app/utils/constants.ts
++++ b/app/utils/constants.ts
+@@ -5,6 +5,7 @@
+ // ─────────────────────────────────────────────
+ 
+ import { ExpenseCategory, CropType, LoanSource } from "@/app/types";
++import { currentBSYear } from "@/app/utils/nepaliDate";
+ 
+ /** Category metadata: label, emoji, tailwind colour classes */
+ export const CATEGORIES: {
+@@ -25,10 +26,16 @@ export const CATEGORIES: {
+   { value: "Miscellaneous", label: "Miscellaneous", emoji: "📦", bg: "bg-gray-100",   text: "text-gray-700",   chart: "#6b7280" },
+ ];
+ 
++// Nepali farming seasons are thought of in Bikram Sambat (BS) years, not
++// the AD year new Date().getFullYear() would give — e.g. mid-2026 AD is
++// already BS 2083 for most of the year, not 2026.
+ export const SEASONS = [
+-  "Garmi Mahina" + new Date().getFullYear(),
+-  "Jado Mahina " + new Date().getFullYear(),
++  "Garmi Mahina " + currentBSYear(),
++  "Jado Mahina " + currentBSYear(),
+ ];
++
++/** Government anudan (subsidy) programs a Nepali farmer might receive support from. */
++export const SUBSIDY_PROGRAMS = ["Fertilizer", "Seed", "Irrigation", "Equipment", "Other"] as const;
+ export const CROPS: { value: CropType | "All Crops"; label: string; emoji: string }[] = [
+   { value: "All Crops",  label: "All Crops",  emoji: "🌾" },
+   { value: "Tomato",     label: "Tomato",     emoji: "🍅" },
+diff --git a/app/utils/nepaliDate.ts b/app/utils/nepaliDate.ts
+new file mode 100644
+index 0000000..ae39a6d
+--- /dev/null
++++ b/app/utils/nepaliDate.ts
+@@ -0,0 +1,56 @@
++// ─────────────────────────────────────────────
++//  KhetiBahi – Nepali (Bikram Sambat) Date Helpers
++//
++//  Every date field in the app is stored as a plain Gregorian (AD)
++//  "YYYY-MM-DD" string — that doesn't change. This file only adds a
++//  read-side conversion so the farmer can also SEE the Bikram Sambat
++//  (BS) date next to it, since that's how most people in Nepal
++//  actually think about dates day-to-day.
++//
++//  Uses parseISO() (not `new Date(isoString)`) to build the JS Date
++//  first — parseISO reads "YYYY-MM-DD" as LOCAL midnight, avoiding the
++//  classic bug where UTC-parsing a date-only string shifts it a day
++//  backwards in negative-UTC-offset timezones.
++// ─────────────────────────────────────────────
++
++import NepaliDate from "nepali-date-converter";
++import { parseISO } from "date-fns";
++
++/** "2026-08-06" → "2083 Shrawan 21" */
++export function adToBS(isoDate: string): string {
++  try {
++    const nd = new NepaliDate(parseISO(isoDate));
++    return nd.format("YYYY MMMM D", "en");
++  } catch {
++    return "";
++  }
++}
++
++/** "2026-08-06" → "2083 Shrawan" (no day) — used for season labels */
++export function adToBSMonthYear(isoDate: string): string {
++  try {
++    const nd = new NepaliDate(parseISO(isoDate));
++    return nd.format("YYYY MMMM", "en");
++  } catch {
++    return "";
++  }
++}
++
++/** Current Bikram Sambat year, e.g. 2083 — used to keep season labels correct without manual updates every AD new year. */
++export function currentBSYear(): number {
++  try {
++    return new NepaliDate().getYear();
++  } catch {
++    // Fallback: BS is roughly AD + 56/57, close enough if the library ever fails to load
++    return new Date().getFullYear() + 57;
++  }
++}
++
++/** Today's BS date, e.g. "2083 Shrawan 21" — for headers like the Today's Entries widget */
++export function todayBS(): string {
++  try {
++    return new NepaliDate().format("YYYY MMMM D", "en");
++  } catch {
++    return "";
++  }
++}
+diff --git a/models/Expense.ts b/models/Expense.ts
+index 8816ef3..7d2e582 100644
+--- a/models/Expense.ts
++++ b/models/Expense.ts
+@@ -46,6 +46,15 @@ export interface IExpense {
+   createdAt: Date;
+ 
+    season?: string; 
++
++  // ── Krishi anudan (government subsidy) tracking ──
++  // Purely informational metadata for reporting to cooperatives/Krishi
++  // offices — never changes `amount`, which stays whatever the farmer
++  // actually paid. subsidyAmount records how much of that was covered
++  // by a government fertilizer/seed/irrigation/equipment subsidy.
++  subsidyReceived?: boolean;
++  subsidyProgram?: string; // "Fertilizer" | "Seed" | "Irrigation" | "Equipment" | "Other"
++  subsidyAmount?: number;
+ }
+ 
+ const ExpenseSchema = new Schema<IExpense>(
+@@ -58,6 +67,10 @@ const ExpenseSchema = new Schema<IExpense>(
+     note: { type: String, default: "", trim: true },
+     billImage: { type: String, default: "" },
+     season: { type: String, required: false },
++
++    subsidyReceived: { type: Boolean, default: false },
++    subsidyProgram: { type: String, required: false, trim: true },
++    subsidyAmount: { type: Number, required: false, min: 0 },
+   },
+   { timestamps: true }
+ );
+diff --git a/package.json b/package.json
+index 7703ce7..8189b66 100644
+--- a/package.json
++++ b/package.json
+@@ -17,6 +17,7 @@
+     "jspdf-autotable": "^5.0.8",
+     "lucide-react": "^1.22.0",
+     "mongoose": "^9.7.3",
++    "nepali-date-converter": "^3.4.0",
+     "next": "16.2.9",
+     "nodemailer": "^9.0.3",
+     "react": "19.2.4",

@@ -11,6 +11,7 @@ import { CalendarCheck2, Coins, Wallet, RefreshCw } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { formatNPR } from "@/app/utils/helpers";
 import { CATEGORIES, CROPS } from "@/app/utils/constants";
+import { todayBS } from "@/app/utils/nepaliDate";
 import { useTodayEntries, TodayIncomeEntry, TodayExpenseEntry } from "@/app/hooks/useTodayEntries";
 
 function cropEmoji(crop: string) {
@@ -50,10 +51,13 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
   return (
     <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
-          <CalendarCheck2 className="w-4 h-4 text-brand" />
-          Today&apos;s Entries
-        </h3>
+        <div>
+          <h3 className="font-display font-semibold text-ink text-sm flex items-center gap-2">
+            <CalendarCheck2 className="w-4 h-4 text-brand" />
+            Today&apos;s Entries
+          </h3>
+          <p className="text-xs text-ink-faint mt-0.5">BS {todayBS()}</p>
+        </div>
         <button
           onClick={() => refetch()}
           disabled={loading}
@@ -68,7 +72,7 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
 
       {!error && !loading && rows.length === 0 && (
         <p className="text-sm text-ink-muted">
-          Nothing logged today yet — the first sale or expense you add will show up here for
+          No entries recorded today — the first sale or expense you add will show up here for
           everyone at home to see.
         </p>
       )}

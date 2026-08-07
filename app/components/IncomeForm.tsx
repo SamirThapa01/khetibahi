@@ -12,6 +12,7 @@ import { X, Save, CheckCircle2, Clock3, CircleDollarSign, AlertTriangle } from "
 import { IncomeFormData, CropType, PaymentStatus } from "@/app/types";
 import { SEASONS } from "@/app/utils/constants";
 import { todayISO, formatNPR, getPaymentStatus } from "@/app/utils/helpers";
+import { adToBS } from "@/app/utils/nepaliDate";
 import ImageUploadField from "@/app/components/ImageUploadField";
 import { useCrops } from "@/app/hooks/useCrops";
 import { useTodayEntries } from "@/app/hooks/useTodayEntries";
@@ -187,6 +188,7 @@ export default function IncomeForm({ onSubmit, onCancel, initialData, editingId 
               onChange={(e) => set("date", e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-line bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
             />
+            {form.date && <p className="text-xs text-ink-faint mt-1">BS: {adToBS(form.date)}</p>}
             {errors.date && <p className="text-negative text-xs mt-1">{errors.date}</p>}
           </div>
 
