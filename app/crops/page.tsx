@@ -14,18 +14,23 @@ import Link from "next/link";
 import { Sprout, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
-import { CROPS } from "@/app/utils/constants";
+import { useCrops } from "@/app/hooks/useCrops";
 import { formatNPR, buildCropProfitLoss } from "@/app/utils/helpers";
 import { CropGridSkeleton } from "@/app/components/Skeleton";
 
 export default function CropsPage() {
   const { expenses, isLoaded } = useExpenses();
   const { income, isLoaded: incomeLoaded } = useIncome();
+  // useCrops() merges the built-in list with whatever this farmer has
+  // added themselves via "+ Add new vegetable…" in the Expense/Income
+  // forms — using the raw CROPS constant here was the bug: newly added
+  // vegetables were saved to the DB but this page never looked for them.
+  const { crops, loading: cropsLoading } = useCrops();
 
   const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
-  const displayCrops = CROPS.filter((c) => c.value !== "All Crops");
+  const displayCrops = crops.filter((c) => c.value !== "All Crops");
 
-  if (!isLoaded || !incomeLoaded) {
+  if (!isLoaded || !incomeLoaded || cropsLoading) {
     return <CropGridSkeleton />;
   }
 

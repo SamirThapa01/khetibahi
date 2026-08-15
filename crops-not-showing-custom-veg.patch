@@ -1,0 +1,71 @@
+diff --git a/app/crops/[crop]/CropDetailClient.tsx b/app/crops/[crop]/CropDetailClient.tsx
+index 02047a0..2f8c48d 100644
+--- a/app/crops/[crop]/CropDetailClient.tsx
++++ b/app/crops/[crop]/CropDetailClient.tsx
+@@ -29,11 +29,12 @@ import {
+ } from "lucide-react";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
+-import { CROPS, CATEGORIES } from "@/app/utils/constants";
++import { CATEGORIES } from "@/app/utils/constants";
+ import { formatNPR, prettyDateWithBS, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
+ import { CropDetailSkeleton } from "@/app/components/Skeleton";
+ import CropBuyerHistoryModal from "@/app/components/CropBuyerHistoryModal";
+ import { exportCropBuyersToPDF } from "@/app/utils/pdfExport";
++import { useCrops } from "@/app/hooks/useCrops";
+ 
+ const STATUS_META = {
+   Paid:    { label: "Paid",    Icon: CheckCircle2,     text: "text-brand",    bg: "bg-brand-soft" },
+@@ -45,8 +46,11 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
+   const { expenses, isLoaded } = useExpenses();
+   const { income, isLoaded: incomeLoaded } = useIncome();
+   const [buyerHistoryOpen, setBuyerHistoryOpen] = useState(false);
++  // Same fix as /crops: a custom vegetable only lives in useCrops()'s
++  // merged list, not the static CROPS constant, so look it up there.
++  const { crops, loading: cropsLoading } = useCrops();
+ 
+-  const cropMeta = CROPS.find((c) => c.value === cropParam && c.value !== "All Crops");
++  const cropMeta = crops.find((c) => c.value === cropParam && c.value !== "All Crops");
+ 
+   const cropIncome = useMemo(
+     () => income.filter((i) => i.crop === cropParam).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+@@ -62,7 +66,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
+     return all.find((p) => p.crop === cropParam);
+   }, [expenses, income, cropParam]);
+ 
+-  if (!isLoaded || !incomeLoaded) {
++  if (!isLoaded || !incomeLoaded || cropsLoading) {
+     return <CropDetailSkeleton />;
+   }
+ 
+diff --git a/app/crops/page.tsx b/app/crops/page.tsx
+index af9f2ec..538e4ca 100644
+--- a/app/crops/page.tsx
++++ b/app/crops/page.tsx
+@@ -14,18 +14,23 @@ import Link from "next/link";
+ import { Sprout, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
+-import { CROPS } from "@/app/utils/constants";
++import { useCrops } from "@/app/hooks/useCrops";
+ import { formatNPR, buildCropProfitLoss } from "@/app/utils/helpers";
+ import { CropGridSkeleton } from "@/app/components/Skeleton";
+ 
+ export default function CropsPage() {
+   const { expenses, isLoaded } = useExpenses();
+   const { income, isLoaded: incomeLoaded } = useIncome();
++  // useCrops() merges the built-in list with whatever this farmer has
++  // added themselves via "+ Add new vegetable…" in the Expense/Income
++  // forms — using the raw CROPS constant here was the bug: newly added
++  // vegetables were saved to the DB but this page never looked for them.
++  const { crops, loading: cropsLoading } = useCrops();
+ 
+   const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
+-  const displayCrops = CROPS.filter((c) => c.value !== "All Crops");
++  const displayCrops = crops.filter((c) => c.value !== "All Crops");
+ 
+-  if (!isLoaded || !incomeLoaded) {
++  if (!isLoaded || !incomeLoaded || cropsLoading) {
+     return <CropGridSkeleton />;
+   }
+ 

@@ -29,11 +29,12 @@ import {
 } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
-import { CROPS, CATEGORIES } from "@/app/utils/constants";
+import { CATEGORIES } from "@/app/utils/constants";
 import { formatNPR, prettyDateWithBS, buildCropProfitLoss, getPaymentStatus, amountDueFor } from "@/app/utils/helpers";
 import { CropDetailSkeleton } from "@/app/components/Skeleton";
 import CropBuyerHistoryModal from "@/app/components/CropBuyerHistoryModal";
 import { exportCropBuyersToPDF } from "@/app/utils/pdfExport";
+import { useCrops } from "@/app/hooks/useCrops";
 
 const STATUS_META = {
   Paid:    { label: "Paid",    Icon: CheckCircle2,     text: "text-brand",    bg: "bg-brand-soft" },
@@ -45,8 +46,11 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
   const { expenses, isLoaded } = useExpenses();
   const { income, isLoaded: incomeLoaded } = useIncome();
   const [buyerHistoryOpen, setBuyerHistoryOpen] = useState(false);
+  // Same fix as /crops: a custom vegetable only lives in useCrops()'s
+  // merged list, not the static CROPS constant, so look it up there.
+  const { crops, loading: cropsLoading } = useCrops();
 
-  const cropMeta = CROPS.find((c) => c.value === cropParam && c.value !== "All Crops");
+  const cropMeta = crops.find((c) => c.value === cropParam && c.value !== "All Crops");
 
   const cropIncome = useMemo(
     () => income.filter((i) => i.crop === cropParam).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -62,7 +66,7 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
     return all.find((p) => p.crop === cropParam);
   }, [expenses, income, cropParam]);
 
-  if (!isLoaded || !incomeLoaded) {
+  if (!isLoaded || !incomeLoaded || cropsLoading) {
     return <CropDetailSkeleton />;
   }
 
