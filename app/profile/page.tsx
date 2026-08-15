@@ -18,11 +18,13 @@ import Link from "next/link";
 import {
   Save, CheckCircle2, HandCoins, PiggyBank, Repeat, ChevronRight,
   LogOut, TrendingUp, TrendingDown, Receipt, Sprout,
+  KeyRound, Phone, MapPin, Plus,
 } from "lucide-react";
 import { useAuth } from "@/app/context/AuthContext";
 import { useIncome } from "@/app/hooks/useIncome";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useLoans } from "@/app/hooks/useLoans";
+import { useInformation } from "@/app/components/Information";
 import AvatarUpload from "@/app/components/AvatarUpload";
 import { ProfileSkeleton } from "@/app/components/Skeleton";
 import { formatNPR } from "@/app/utils/helpers";
@@ -42,6 +44,7 @@ export default function ProfilePage() {
   const { income, totalIncome, isLoaded: incomeLoaded } = useIncome();
   const { totalSpend, isLoaded: expensesLoaded } = useExpenses();
   const { totalDue: loansDue, isLoaded: loansLoaded } = useLoans();
+  const { show } = useInformation();
 
   const [name, setName] = useState(user?.name ?? "");
   const [profileImage, setProfileImage] = useState(user?.profileImage);
@@ -100,6 +103,21 @@ export default function ProfilePage() {
   async function handleLogout() {
     setLoggingOut(true);
     await logout();
+  }
+
+  // Password reset and the two "other details" fields below don't have
+  // backend support yet (no /api/auth/forgot-password route, and phone/
+  // farmLocation aren't on the User model). Wiring the UI now so the
+  // Security card doesn't feel unfinished, and swapping these for real
+  // requests is a small follow-up once those routes exist.
+  function handleForgotPassword() {
+    show("info", "Password reset isn't wired up yet — for now, ask an admin to reset it for you.");
+  }
+  function handleAddPhone() {
+    show("info", "Adding a phone number is coming soon.");
+  }
+  function handleAddFarmLocation() {
+    show("info", "Adding a farm location is coming soon.");
   }
 
   return (
@@ -223,6 +241,65 @@ export default function ProfilePage() {
             {saving ? "Saving…" : "Save Changes"}
           </button>
         </form>
+      </div>
+
+      {/* Security & other details — password reset, plus optional fields
+          that aren't on the User model yet (see handlers above). */}
+      <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
+        <div className="px-5 pt-4 pb-2">
+          <h3 className="text-sm font-display font-semibold text-ink">Security &amp; other details</h3>
+        </div>
+        <div className="divide-y divide-line">
+          <div className="flex items-center gap-3 px-5 py-3.5">
+            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-soft text-brand flex-shrink-0">
+              <KeyRound className="w-4.5 h-4.5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink">Password</p>
+              <p className="text-xs text-ink-muted truncate">Keep it private — don&apos;t share it, even with family</p>
+            </div>
+            <button
+              onClick={handleForgotPassword}
+              className="text-xs font-semibold text-negative flex-shrink-0 hover:underline underline-offset-2"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 px-5 py-3.5">
+            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft text-accent flex-shrink-0">
+              <Phone className="w-4.5 h-4.5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink">Phone number</p>
+              <p className="text-xs text-ink-faint italic truncate">Not added yet</p>
+            </div>
+            <button
+              onClick={handleAddPhone}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-muted hover:border-brand hover:text-brand hover:bg-brand-soft transition-colors flex-shrink-0"
+            >
+              <Plus className="w-3 h-3" />
+              Add
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 px-5 py-3.5">
+            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-negative-soft text-negative flex-shrink-0">
+              <MapPin className="w-4.5 h-4.5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink">Farm location</p>
+              <p className="text-xs text-ink-faint italic truncate">Not added yet</p>
+            </div>
+            <button
+              onClick={handleAddFarmLocation}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-muted hover:border-brand hover:text-brand hover:bg-brand-soft transition-colors flex-shrink-0"
+            >
+              <Plus className="w-3 h-3" />
+              Add
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Logout — the only place mobile users can reach this, since the

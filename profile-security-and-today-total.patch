@@ -1,0 +1,167 @@
+diff --git a/app/components/TodayEntries.tsx b/app/components/TodayEntries.tsx
+index 1f09cee..d5db72d 100644
+--- a/app/components/TodayEntries.tsx
++++ b/app/components/TodayEntries.tsx
+@@ -7,7 +7,7 @@
+ 
+ "use client";
+ 
+-import { CalendarCheck2, Coins, Wallet, RefreshCw } from "lucide-react";
++import { CalendarCheck2, Coins, Wallet, RefreshCw, Calculator } from "lucide-react";
+ import { format, parseISO } from "date-fns";
+ import { formatNPR } from "@/app/utils/helpers";
+ import { CATEGORIES, CROPS } from "@/app/utils/constants";
+@@ -48,6 +48,14 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
+     ...expenses.map((entry): Row => ({ kind: "expense", entry })),
+   ].sort((a, b) => new Date(b.entry.createdAt).getTime() - new Date(a.entry.createdAt).getTime());
+ 
++  // Combined total across every entry logged today — income and expenses
++  // added together, not netted against each other. This answers "how much
++  // money moved today, in total?" rather than "did I come out ahead?" —
++  // the net position already lives on the dashboard's summary cards.
++  const todayIncomeTotal = income.reduce((sum, e) => sum + e.quantityKg * e.ratePerKg, 0);
++  const todayExpenseTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
++  const todayCombinedTotal = todayIncomeTotal + todayExpenseTotal;
++
+   return (
+     <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
+       <div className="flex items-center justify-between mb-3">
+@@ -68,6 +76,24 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
+         </button>
+       </div>
+ 
++      {/* Combined total — every rupee logged today, income and expenses
++          added together (not netted). Only shown once there's something
++          to total, so the empty state below still reads cleanly. */}
++      {!error && !loading && rows.length > 0 && (
++        <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
++          <span className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
++            <Calculator className="w-3.5 h-3.5 text-ink-faint" />
++            Today&apos;s total
++          </span>
++          <div className="text-right">
++            <p className="text-sm font-bold text-ink tabular-nums">{formatNPR(todayCombinedTotal)}</p>
++            <p className="text-[11px] text-ink-faint tabular-nums">
++              {formatNPR(todayIncomeTotal)} in · {formatNPR(todayExpenseTotal)} out
++            </p>
++          </div>
++        </div>
++      )}
++
+       {error && <p className="text-sm text-negative">{error}</p>}
+ 
+       {!error && !loading && rows.length === 0 && (
+diff --git a/app/profile/page.tsx b/app/profile/page.tsx
+index dfbfe4a..2c9a3ff 100644
+--- a/app/profile/page.tsx
++++ b/app/profile/page.tsx
+@@ -18,11 +18,13 @@ import Link from "next/link";
+ import {
+   Save, CheckCircle2, HandCoins, PiggyBank, Repeat, ChevronRight,
+   LogOut, TrendingUp, TrendingDown, Receipt, Sprout,
++  KeyRound, Phone, MapPin, Plus,
+ } from "lucide-react";
+ import { useAuth } from "@/app/context/AuthContext";
+ import { useIncome } from "@/app/hooks/useIncome";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useLoans } from "@/app/hooks/useLoans";
++import { useInformation } from "@/app/components/Information";
+ import AvatarUpload from "@/app/components/AvatarUpload";
+ import { ProfileSkeleton } from "@/app/components/Skeleton";
+ import { formatNPR } from "@/app/utils/helpers";
+@@ -42,6 +44,7 @@ export default function ProfilePage() {
+   const { income, totalIncome, isLoaded: incomeLoaded } = useIncome();
+   const { totalSpend, isLoaded: expensesLoaded } = useExpenses();
+   const { totalDue: loansDue, isLoaded: loansLoaded } = useLoans();
++  const { show } = useInformation();
+ 
+   const [name, setName] = useState(user?.name ?? "");
+   const [profileImage, setProfileImage] = useState(user?.profileImage);
+@@ -102,6 +105,21 @@ export default function ProfilePage() {
+     await logout();
+   }
+ 
++  // Password reset and the two "other details" fields below don't have
++  // backend support yet (no /api/auth/forgot-password route, and phone/
++  // farmLocation aren't on the User model). Wiring the UI now so the
++  // Security card doesn't feel unfinished, and swapping these for real
++  // requests is a small follow-up once those routes exist.
++  function handleForgotPassword() {
++    show("info", "Password reset isn't wired up yet — for now, ask an admin to reset it for you.");
++  }
++  function handleAddPhone() {
++    show("info", "Adding a phone number is coming soon.");
++  }
++  function handleAddFarmLocation() {
++    show("info", "Adding a farm location is coming soon.");
++  }
++
+   return (
+     <div className="max-w-2xl mx-auto space-y-5">
+       <div>
+@@ -225,6 +243,65 @@ export default function ProfilePage() {
+         </form>
+       </div>
+ 
++      {/* Security & other details — password reset, plus optional fields
++          that aren't on the User model yet (see handlers above). */}
++      <div className="bg-surface rounded-2xl border border-line shadow-soft overflow-hidden">
++        <div className="px-5 pt-4 pb-2">
++          <h3 className="text-sm font-display font-semibold text-ink">Security &amp; other details</h3>
++        </div>
++        <div className="divide-y divide-line">
++          <div className="flex items-center gap-3 px-5 py-3.5">
++            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-soft text-brand flex-shrink-0">
++              <KeyRound className="w-4.5 h-4.5" />
++            </span>
++            <div className="min-w-0 flex-1">
++              <p className="text-sm font-medium text-ink">Password</p>
++              <p className="text-xs text-ink-muted truncate">Keep it private — don&apos;t share it, even with family</p>
++            </div>
++            <button
++              onClick={handleForgotPassword}
++              className="text-xs font-semibold text-negative flex-shrink-0 hover:underline underline-offset-2"
++            >
++              Forgot password?
++            </button>
++          </div>
++
++          <div className="flex items-center gap-3 px-5 py-3.5">
++            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-accent-soft text-accent flex-shrink-0">
++              <Phone className="w-4.5 h-4.5" />
++            </span>
++            <div className="min-w-0 flex-1">
++              <p className="text-sm font-medium text-ink">Phone number</p>
++              <p className="text-xs text-ink-faint italic truncate">Not added yet</p>
++            </div>
++            <button
++              onClick={handleAddPhone}
++              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-muted hover:border-brand hover:text-brand hover:bg-brand-soft transition-colors flex-shrink-0"
++            >
++              <Plus className="w-3 h-3" />
++              Add
++            </button>
++          </div>
++
++          <div className="flex items-center gap-3 px-5 py-3.5">
++            <span className="flex items-center justify-center w-10 h-10 rounded-xl bg-negative-soft text-negative flex-shrink-0">
++              <MapPin className="w-4.5 h-4.5" />
++            </span>
++            <div className="min-w-0 flex-1">
++              <p className="text-sm font-medium text-ink">Farm location</p>
++              <p className="text-xs text-ink-faint italic truncate">Not added yet</p>
++            </div>
++            <button
++              onClick={handleAddFarmLocation}
++              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line text-xs font-semibold text-ink-muted hover:border-brand hover:text-brand hover:bg-brand-soft transition-colors flex-shrink-0"
++            >
++              <Plus className="w-3 h-3" />
++              Add
++            </button>
++          </div>
++        </div>
++      </div>
++
+       {/* Logout — the only place mobile users can reach this, since the
+           Sidebar (which has its own logout) is desktop-only. */}
+       <button

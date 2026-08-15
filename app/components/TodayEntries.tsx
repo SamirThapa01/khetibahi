@@ -7,7 +7,7 @@
 
 "use client";
 
-import { CalendarCheck2, Coins, Wallet, RefreshCw } from "lucide-react";
+import { CalendarCheck2, Coins, Wallet, RefreshCw, Calculator } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { formatNPR } from "@/app/utils/helpers";
 import { CATEGORIES, CROPS } from "@/app/utils/constants";
@@ -48,6 +48,14 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
     ...expenses.map((entry): Row => ({ kind: "expense", entry })),
   ].sort((a, b) => new Date(b.entry.createdAt).getTime() - new Date(a.entry.createdAt).getTime());
 
+  // Combined total across every entry logged today — income and expenses
+  // added together, not netted against each other. This answers "how much
+  // money moved today, in total?" rather than "did I come out ahead?" —
+  // the net position already lives on the dashboard's summary cards.
+  const todayIncomeTotal = income.reduce((sum, e) => sum + e.quantityKg * e.ratePerKg, 0);
+  const todayExpenseTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const todayCombinedTotal = todayIncomeTotal + todayExpenseTotal;
+
   return (
     <div className="bg-surface rounded-2xl border border-line p-5 shadow-soft">
       <div className="flex items-center justify-between mb-3">
@@ -67,6 +75,24 @@ export default function TodayEntries({ refreshSignal }: TodayEntriesProps) {
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
+
+      {/* Combined total — every rupee logged today, income and expenses
+          added together (not netted). Only shown once there's something
+          to total, so the empty state below still reads cleanly. */}
+      {!error && !loading && rows.length > 0 && (
+        <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2.5 rounded-xl bg-surface-2 border border-line">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+            <Calculator className="w-3.5 h-3.5 text-ink-faint" />
+            Today&apos;s total
+          </span>
+          <div className="text-right">
+            <p className="text-sm font-bold text-ink tabular-nums">{formatNPR(todayCombinedTotal)}</p>
+            <p className="text-[11px] text-ink-faint tabular-nums">
+              {formatNPR(todayIncomeTotal)} in · {formatNPR(todayExpenseTotal)} out
+            </p>
+          </div>
+        </div>
+      )}
 
       {error && <p className="text-sm text-negative">{error}</p>}
 
