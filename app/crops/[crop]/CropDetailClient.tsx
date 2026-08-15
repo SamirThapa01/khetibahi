@@ -62,9 +62,9 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
   );
 
   const pl = useMemo(() => {
-    const all = buildCropProfitLoss(expenses, income);
+    const all = buildCropProfitLoss(expenses, income, crops.map((c) => c.value));
     return all.find((p) => p.crop === cropParam);
-  }, [expenses, income, cropParam]);
+  }, [expenses, income, crops, cropParam]);
 
   if (!isLoaded || !incomeLoaded || cropsLoading) {
     return <CropDetailSkeleton />;

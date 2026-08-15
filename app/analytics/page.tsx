@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users, Landmark } from "lucide-react";
 import { useExpenses } from "@/app/hooks/useExpenses";
 import { useIncome } from "@/app/hooks/useIncome";
+import { useCrops } from "@/app/hooks/useCrops";
 import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
 import { CROPS } from "@/app/utils/constants";
 import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDateWithBS } from "@/app/utils/helpers";
@@ -28,11 +29,14 @@ const STATUS_META = {
 export default function AnalyticsPage() {
   const { expenses, monthlySummaries, isLoaded } = useExpenses();
   const { income, isLoaded: incomeLoaded } = useIncome();
+  const { crops, loading: cropsLoading } = useCrops();
 
   // Profit/loss per crop: income earned minus expenses spent on that crop.
   // "All Crops" expenses are excluded here on purpose — see buildCropProfitLoss
-  // in utils/helpers.ts for why.
-  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
+  // in utils/helpers.ts for why. Pass the merged (built-in + custom) crop
+  // names in explicitly, otherwise custom vegetables get skipped entirely.
+  const cropNames = useMemo(() => crops.filter((c) => c.value !== "All Crops").map((c) => c.value), [crops]);
+  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income, cropNames), [expenses, income, cropNames]);
 
   // Only show crops that actually have *some* activity (income or expense),
   // so the farmer isn't staring at six rows of zeros.
@@ -48,10 +52,12 @@ export default function AnalyticsPage() {
       .map(([crop, total]) => ({
         crop: crop as CropType | "All Crops",
         total,
-        emoji: CROPS.find((c) => c.value === crop)?.emoji ?? "🌱",
+        // Look up emoji from the merged list first (covers custom crops),
+        // falling back to the static CROPS list for "All Crops" etc.
+        emoji: crops.find((c) => c.value === crop)?.emoji ?? CROPS.find((c) => c.value === crop)?.emoji ?? "🌱",
       }))
       .sort((a, b) => b.total - a.total);
-  }, [expenses]);
+  }, [expenses, crops]);
 
   const maxCropTotal = cropTotals[0]?.total ?? 1;
 
@@ -80,7 +86,7 @@ export default function AnalyticsPage() {
   }, [expenses]);
   const totalSubsidy = subsidyByProgram.reduce((sum, p) => sum + p.total, 0);
 
-  if (!isLoaded || !incomeLoaded) {
+  if (!isLoaded || !incomeLoaded || cropsLoading) {
     return <AnalyticsSkeleton />;
   }
 

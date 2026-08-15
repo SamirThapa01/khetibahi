@@ -289,9 +289,11 @@ export function buildBuyerDues(income: Income[]): BuyerDue[] {
  *   clean. They still count in the overall farm total elsewhere.
  * Profit = income - expense. Negative means a loss on that crop.
  */
-export function buildCropProfitLoss(expenses: Expense[], income: Income[]): CropProfitLoss[] {
-  const cropNames = CROPS.filter((c) => c.value !== "All Crops").map((c) => c.value);
-
+export function buildCropProfitLoss(
+  expenses: Expense[],
+  income: Income[],
+  cropNames: string[] = CROPS.filter((c) => c.value !== "All Crops").map((c) => c.value)
+): CropProfitLoss[] {
   return cropNames.map((crop) => {
     const cropIncome = income.filter((i) => i.crop === crop);
     const cropExpenses = expenses.filter((e) => e.crop === crop);

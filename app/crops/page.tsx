@@ -27,8 +27,13 @@ export default function CropsPage() {
   // vegetables were saved to the DB but this page never looked for them.
   const { crops, loading: cropsLoading } = useCrops();
 
-  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
   const displayCrops = crops.filter((c) => c.value !== "All Crops");
+  // Pass the merged (built-in + custom) crop names in explicitly —
+  // buildCropProfitLoss only computes totals for names it's given.
+  const cropPL = useMemo(
+    () => buildCropProfitLoss(expenses, income, displayCrops.map((c) => c.value)),
+    [expenses, income, displayCrops]
+  );
 
   if (!isLoaded || !incomeLoaded || cropsLoading) {
     return <CropGridSkeleton />;

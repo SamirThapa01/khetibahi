@@ -1,0 +1,107 @@
+diff --git a/app/analytics/page.tsx b/app/analytics/page.tsx
+index 1545a07..2ea3383 100644
+--- a/app/analytics/page.tsx
++++ b/app/analytics/page.tsx
+@@ -13,6 +13,7 @@ import { useMemo } from "react";
+ import { BarChart3, Calendar, TrendingUp, TrendingDown, CheckCircle2, CircleDollarSign, Clock3, Users, Landmark } from "lucide-react";
+ import { useExpenses } from "@/app/hooks/useExpenses";
+ import { useIncome } from "@/app/hooks/useIncome";
++import { useCrops } from "@/app/hooks/useCrops";
+ import MonthlyTrendChart from "@/app/components/MonthlyTrendChart";
+ import { CROPS } from "@/app/utils/constants";
+ import { formatNPR, buildCropProfitLoss, buildPaymentStatusSummary, buildBuyerDues, prettyDateWithBS } from "@/app/utils/helpers";
+@@ -28,11 +29,14 @@ const STATUS_META = {
+ export default function AnalyticsPage() {
+   const { expenses, monthlySummaries, isLoaded } = useExpenses();
+   const { income, isLoaded: incomeLoaded } = useIncome();
++  const { crops, loading: cropsLoading } = useCrops();
+ 
+   // Profit/loss per crop: income earned minus expenses spent on that crop.
+   // "All Crops" expenses are excluded here on purpose — see buildCropProfitLoss
+-  // in utils/helpers.ts for why.
+-  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
++  // in utils/helpers.ts for why. Pass the merged (built-in + custom) crop
++  // names in explicitly, otherwise custom vegetables get skipped entirely.
++  const cropNames = useMemo(() => crops.filter((c) => c.value !== "All Crops").map((c) => c.value), [crops]);
++  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income, cropNames), [expenses, income, cropNames]);
+ 
+   // Only show crops that actually have *some* activity (income or expense),
+   // so the farmer isn't staring at six rows of zeros.
+@@ -48,10 +52,12 @@ export default function AnalyticsPage() {
+       .map(([crop, total]) => ({
+         crop: crop as CropType | "All Crops",
+         total,
+-        emoji: CROPS.find((c) => c.value === crop)?.emoji ?? "🌱",
++        // Look up emoji from the merged list first (covers custom crops),
++        // falling back to the static CROPS list for "All Crops" etc.
++        emoji: crops.find((c) => c.value === crop)?.emoji ?? CROPS.find((c) => c.value === crop)?.emoji ?? "🌱",
+       }))
+       .sort((a, b) => b.total - a.total);
+-  }, [expenses]);
++  }, [expenses, crops]);
+ 
+   const maxCropTotal = cropTotals[0]?.total ?? 1;
+ 
+@@ -80,7 +86,7 @@ export default function AnalyticsPage() {
+   }, [expenses]);
+   const totalSubsidy = subsidyByProgram.reduce((sum, p) => sum + p.total, 0);
+ 
+-  if (!isLoaded || !incomeLoaded) {
++  if (!isLoaded || !incomeLoaded || cropsLoading) {
+     return <AnalyticsSkeleton />;
+   }
+ 
+diff --git a/app/crops/[crop]/CropDetailClient.tsx b/app/crops/[crop]/CropDetailClient.tsx
+index 2f8c48d..ab78934 100644
+--- a/app/crops/[crop]/CropDetailClient.tsx
++++ b/app/crops/[crop]/CropDetailClient.tsx
+@@ -62,9 +62,9 @@ export default function CropDetailClient({ cropParam }: { cropParam: string }) {
+   );
+ 
+   const pl = useMemo(() => {
+-    const all = buildCropProfitLoss(expenses, income);
++    const all = buildCropProfitLoss(expenses, income, crops.map((c) => c.value));
+     return all.find((p) => p.crop === cropParam);
+-  }, [expenses, income, cropParam]);
++  }, [expenses, income, crops, cropParam]);
+ 
+   if (!isLoaded || !incomeLoaded || cropsLoading) {
+     return <CropDetailSkeleton />;
+diff --git a/app/crops/page.tsx b/app/crops/page.tsx
+index 538e4ca..fd5758b 100644
+--- a/app/crops/page.tsx
++++ b/app/crops/page.tsx
+@@ -27,8 +27,13 @@ export default function CropsPage() {
+   // vegetables were saved to the DB but this page never looked for them.
+   const { crops, loading: cropsLoading } = useCrops();
+ 
+-  const cropPL = useMemo(() => buildCropProfitLoss(expenses, income), [expenses, income]);
+   const displayCrops = crops.filter((c) => c.value !== "All Crops");
++  // Pass the merged (built-in + custom) crop names in explicitly —
++  // buildCropProfitLoss only computes totals for names it's given.
++  const cropPL = useMemo(
++    () => buildCropProfitLoss(expenses, income, displayCrops.map((c) => c.value)),
++    [expenses, income, displayCrops]
++  );
+ 
+   if (!isLoaded || !incomeLoaded || cropsLoading) {
+     return <CropGridSkeleton />;
+diff --git a/app/utils/helpers.ts b/app/utils/helpers.ts
+index 39a0225..9b1897d 100644
+--- a/app/utils/helpers.ts
++++ b/app/utils/helpers.ts
+@@ -289,9 +289,11 @@ export function buildBuyerDues(income: Income[]): BuyerDue[] {
+  *   clean. They still count in the overall farm total elsewhere.
+  * Profit = income - expense. Negative means a loss on that crop.
+  */
+-export function buildCropProfitLoss(expenses: Expense[], income: Income[]): CropProfitLoss[] {
+-  const cropNames = CROPS.filter((c) => c.value !== "All Crops").map((c) => c.value);
+-
++export function buildCropProfitLoss(
++  expenses: Expense[],
++  income: Income[],
++  cropNames: string[] = CROPS.filter((c) => c.value !== "All Crops").map((c) => c.value)
++): CropProfitLoss[] {
+   return cropNames.map((crop) => {
+     const cropIncome = income.filter((i) => i.crop === crop);
+     const cropExpenses = expenses.filter((e) => e.crop === crop);
